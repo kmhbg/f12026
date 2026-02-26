@@ -1,32 +1,56 @@
 #!/usr/bin/env bash
 # F1 Betting 2026 – installationsskript för Proxmox/Caddy-miljö
-# Kör detta på servern (t.ex. i /var/www/f1-betting-2026 efter att du kopierat dit filerna).
+# Kör detta på servern. Skriptet:
+# 1) Säkerställer att git och Node finns
+# 2) Klonar/uppdaterar projektet från GitHub
+# 3) Installerar npm-beroenden
+# 4) Sätter upp systemd-tjänst
+# 5) Uppdaterar Caddys konfiguration automatiskt
 
 set -e
 
 APP_DIR="${APP_DIR:-/var/www/f1-betting-2026}"
 CADDY_USER="${CADDY_USER:-www-data}"
 SERVICE_NAME="f1-betting"
+# Sätt till din riktiga GitHub-URL för projektet:
+GIT_URL="${GIT_URL:-https://github.com/DITT-ACCOUNT/f1-betting-2026.git}"
 
 echo "=== F1 Betting 2026 – Installerar i $APP_DIR ==="
 
-# Om skriptet körs inifrån app-katalogen (t.ex. efter git clone)
-if [ -f "package.json" ] && [ -f "server.js" ]; then
-  INSTALL_DIR="$(pwd)"
-else
-  INSTALL_DIR="$APP_DIR"
-  if [ ! -d "$INSTALL_DIR" ] || [ ! -f "$INSTALL_DIR/package.json" ]; then
-    echo "Fel: Hittar inte package.json i $INSTALL_DIR. Klona/kopiera först appen dit."
+# Säkerställ att git är installerat
+if ! command -v git &>/dev/null; then
+  echo "git saknas – försöker installera (apt)..."
+  if command -v apt-get &>/dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y git
+  else
+    echo "Kunde inte installera git automatiskt (apt-get saknas). Installera git manuellt och kör skriptet igen."
     exit 1
   fi
-  cd "$INSTALL_DIR"
 fi
 
-# Node.js
+# Säkerställ att Node.js finns
 if ! command -v node &>/dev/null; then
-  echo "Node.js saknas. Installera t.ex.: curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs"
+  echo "Node.js saknas. Installera t.ex.:"
+  echo "  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -"
+  echo "  sudo apt-get install -y nodejs"
   exit 1
 fi
+
+# Klona eller uppdatera från GitHub
+if [ -d "$APP_DIR/.git" ]; then
+  echo "Hittade befintligt git-repo i $APP_DIR – uppdaterar med git pull..."
+  cd "$APP_DIR"
+  git pull --ff-only || echo "Varning: git pull misslyckades, kontrollera manuellt."
+else
+  echo "Klonar projektet från $GIT_URL till $APP_DIR ..."
+  sudo mkdir -p "$APP_DIR"
+  sudo chown "$(whoami)":"$(whoami)" "$APP_DIR"
+  git clone "$GIT_URL" "$APP_DIR"
+  cd "$APP_DIR"
+fi
+
+INSTALL_DIR="$(pwd)"
 
 # npm install
 echo "Installerar npm-beroenden..."
@@ -53,8 +77,28 @@ fi
 
 # Caddy
 if command -v caddy &>/dev/null; then
-  echo "Caddy är installerat. Lägg till reverse proxy manuellt eller använd deploy/Caddyfile."
-  echo "Exempel: sudo cp $SCRIPT_DIR/Caddyfile /etc/caddy/Caddyfile (justera domän) och sudo systemctl reload caddy"
+  echo "Caddy hittades – försöker uppdatera /etc/caddy/Caddyfile automatiskt..."
+  if [ -f "$SCRIPT_DIR/Caddyfile" ]; then
+    # Lägg till vår konfiguration om den inte redan finns (markerad med kommentar)
+    if [ -f /etc/caddy/Caddyfile ]; then
+      if ! grep -q "F1 Betting 2026 – Caddy reverse proxy" /etc/caddy/Caddyfile; then
+        echo "Lägger till F1 Betting-block i /etc/caddy/Caddyfile ..."
+        echo "" | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+        echo "# F1 Betting 2026 – autoimport" | sudo tee -a /etc/caddy/Caddyfile >/dev/null
+        sudo tee -a /etc/caddy/Caddyfile >/dev/null < "$SCRIPT_DIR/Caddyfile"
+      else
+        echo "Caddyfile verkar redan innehålla F1 Betting-konfiguration."
+      fi
+    else
+      echo "Ingen /etc/caddy/Caddyfile hittades – kopierar vår som bas."
+      sudo cp "$SCRIPT_DIR/Caddyfile" /etc/caddy/Caddyfile
+    fi
+
+    echo "Laddar om Caddy..."
+    sudo systemctl reload caddy || echo "Varning: kunde inte reloada Caddy – kontrollera konfigurationen."
+  else
+    echo "deploy/Caddyfile hittades inte, hoppar över Caddy-konfiguration."
+  fi
 else
   echo "Caddy hittades inte. Installera Caddy och konfigurera enligt deploy/Caddyfile."
 fi
