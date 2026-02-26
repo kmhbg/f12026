@@ -1,0 +1,36 @@
+{
+  "users": [
+    {
+      "id": "seb",
+      "name": "Sebastian"
+    },
+    {
+      "id": "filip",
+      "name": "Filip"
+    },
+    {
+      "id": "marcus",
+      "name": "Marcus"
+    },
+    {
+      "id": "oskar",
+      "name": "Oskar"
+    },
+    {
+      "id": "jonathan",
+      "name": "Jonathan"
+    },
+    {
+      "id": "johan",
+      "name": "Johan"
+    },
+    {
+      "id": "jonas",
+      "name": "Jonas"
+    }
+  ],
+  "seasonBets": [
+
+  ],
+  "raceBets": []
+}

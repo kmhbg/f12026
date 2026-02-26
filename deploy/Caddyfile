@@ -1,0 +1,23 @@
+# F1 Betting 2026 – Caddy reverse proxy
+# Byta ut din.domain.se mot din egen domän eller IP.
+# Caddy skickar alla anrop vidare till Node-appen som kör på port 3000.
+
+{
+	# Globala inställningar (valfritt)
+}
+
+# Alternativ 1: Med domän (Caddy fixar HTTPS automatiskt om port 80/443 är öppna)
+# f1bet.example.com {
+# 	reverse_proxy localhost:3000
+# }
+
+# Alternativ 2: Med domän och explicit HTTP (inga certifikat)
+# http://f1bet.example.com {
+# 	reverse_proxy localhost:3000
+# }
+
+# Alternativ 3: Lyssna på IP eller lokal host (för test)
+# Ersätt med din server-IP eller använd :80 för alla gränssnitt
+:80 {
+	reverse_proxy localhost:3000
+}

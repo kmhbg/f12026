@@ -1,0 +1,148 @@
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+  background: #000000;
+  color: #f5f5f5;
+}
+
+header {
+  background: #111111;
+  padding: 1rem 2rem;
+  border-bottom: 3px solid #e10600;
+}
+
+h1 {
+  margin: 0;
+}
+
+main {
+  padding: 1.5rem 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+section {
+  margin-bottom: 1.5rem;
+  background: #15151e;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #262634;
+}
+
+.section-block {
+  margin-bottom: 1rem;
+}
+
+nav {
+  margin: 1rem 0;
+}
+
+nav button {
+  margin-right: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  border: none;
+  background: #262634;
+  color: #f5f5f5;
+  cursor: pointer;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+nav button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+nav button.active {
+  background: #e10600;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  border-bottom: 1px solid #262634;
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+}
+
+th {
+  background: #111111;
+}
+
+input[type="number"],
+select {
+  background: #111111;
+  color: #f5f5f5;
+  border: 1px solid #3c4a5a;
+  border-radius: 4px;
+  padding: 0.2rem 0.3rem;
+}
+
+button {
+  font-size: 0.9rem;
+}
+
+.status {
+  margin-left: 0.5rem;
+  font-size: 0.8rem;
+  color: #e10600;
+}
+
+.hidden {
+  display: none;
+}
+
+.race-row {
+  margin: 0.3rem 0;
+}
+
+.user-manage-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.user-manage-row input {
+  flex: 1;
+}
+
+.info {
+  font-size: 0.85rem;
+  color: #c5c6c7;
+}
+
+.driver-headshot {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid #262634;
+}
+
+.circuit-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.circuit-wrapper {
+  margin-top: 0.5rem;
+  background: #0b0b10;
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  justify-content: center;
+}
+
+.circuit-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+

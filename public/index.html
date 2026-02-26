@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <title>F1 Betting 2026</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>F1 Betting 2026</h1>
+    </header>
+
+    <main>
+      <section id="user-section">
+        <h2>1. Välj användare</h2>
+        <label for="user-select">Användare:</label>
+        <select id="user-select">
+          <option value="">-- Välj --</option>
+        </select>
+      </section>
+
+      <nav id="nav-section">
+        <button id="tab-season" disabled>Årsbet</button>
+        <button id="tab-race" disabled>Racebet</button>
+      </nav>
+
+      <section id="season-section" class="hidden">
+        <h2>2. Årsbet (säsongen)</h2>
+        <p id="season-lock-info" class="info"></p>
+
+        <div class="section-block">
+          <h3>Förare</h3>
+          <table id="drivers-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Bild</th>
+                <th>Förare</th>
+                <th>Team</th>
+                <th>Slutplacering</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="section-block">
+          <h3>Stall</h3>
+          <table id="teams-table">
+            <thead>
+              <tr>
+                <th>Team</th>
+                <th>Slutplacering</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <button id="save-season-btn">Spara årsbet</button>
+        <span id="season-status" class="status"></span>
+      </section>
+
+      <section id="race-section" class="hidden">
+        <h2>3. Racebet</h2>
+
+        <div class="section-block">
+          <label for="race-select">Välj race:</label>
+          <select id="race-select">
+            <option value="">-- Välj race --</option>
+          </select>
+        </div>
+
+        <div class="section-block circuit-block">
+          <h3>Bana</h3>
+          <div class="circuit-wrapper">
+            <img id="circuit-image" class="circuit-image hidden" alt="Bana" />
+          </div>
+        </div>
+
+        <div class="section-block">
+          <h3>Top 3 för detta race</h3>
+          <div class="race-row">
+            <label for="p1-select">P1:</label>
+            <select id="p1-select"></select>
+          </div>
+          <div class="race-row">
+            <label for="p2-select">P2:</label>
+            <select id="p2-select"></select>
+          </div>
+          <div class="race-row">
+            <label for="p3-select">P3:</label>
+            <select id="p3-select"></select>
+          </div>
+        </div>
+
+        <button id="save-race-btn">Spara racebet</button>
+        <span id="race-status" class="status"></span>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
+
