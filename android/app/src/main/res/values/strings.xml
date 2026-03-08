@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">F1tting</string>
+    <string name="title_activity_main">F1tting</string>
+    <string name="package_name">com.f1tting.app</string>
+    <string name="custom_url_scheme">com.f1tting.app</string>
+</resources>

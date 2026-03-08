@@ -4,11 +4,19 @@
   "description": "Enkel F1-bettingsite för kompisgäng, säsongen 2026.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "cap:sync": "cap sync",
+    "build:apk": "sh scripts/build-apk.sh",
+    "build:apk:release": "cap sync && cd android && ./gradlew assembleRelease && cp app/build/outputs/apk/release/app-release.apk ../public/downloads/f1tting.apk && echo 'APK (release) kopierad till public/downloads/f1tting.apk'"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
     "cors": "^2.8.5",
     "express": "^4.19.0",
     "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.2.0"
   }
 }

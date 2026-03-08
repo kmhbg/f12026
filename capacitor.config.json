@@ -1,0 +1,9 @@
+{
+  "appId": "com.f1tting.app",
+  "appName": "F1tting",
+  "webDir": "public",
+  "server": {
+    "url": "https://betsel.fortiddns.com",
+    "cleartext": false
+  }
+}

@@ -140,6 +140,32 @@ button {
   display: none;
 }
 
+.button {
+  display: inline-block;
+  padding: 0.6rem 1.2rem;
+  background: #e10600;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #b80500;
+}
+
+.install-steps {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+  color: #c5c6c7;
+}
+
+.install-steps li {
+  margin-bottom: 0.5rem;
+}
+
 .race-row {
   margin: 0.3rem 0;
 }

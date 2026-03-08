@@ -1,0 +1,60 @@
+<!--update-->
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#e10600" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <title>F1 Betting 2026 – App-installation</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-row">
+        <h1>F1 Betting 2026 – App-installation</h1>
+        <nav class="header-nav">
+          <a href="/index.html">Spel</a>
+          <a href="/settlement.html">Rättning</a>
+          <a href="/dashboard.html">Dashboard</a>
+          <a href="/app-installation.html" class="active">App</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="section-block">
+        <h2>Ladda ner appen</h2>
+        <p class="info">
+          Denna sida finns under <strong>App</strong> i menyn. Direktadress: 
+          <strong>https://betsel.fortiddns.com/app-installation.html</strong>
+        </p>
+      </section>
+      <section class="section-block">
+        <h2>Android</h2>
+        <p class="info">Ladda ner APK-filen och installera på din Android-enhet. Du kan behöva tillåta installation från "okända källor" i inställningarna.</p>
+        <p>
+          <a id="app-download-android" href="/downloads/f1tting.apk" class="button" download>Ladda ner F1tting för Android</a>
+        </p>
+        <p id="app-android-unavailable" class="info hidden">APK är inte tillgänglig ännu. Bygg och lägg filen i <code>public/downloads/f1tting.apk</code> på servern.</p>
+      </section>
+
+      <section class="section-block">
+        <h2>iOS</h2>
+        <p class="info">På iPhone och iPad finns ingen nedladdningsbar appfil. Använd istället "Lägg till på hemskärmen" – då får du en app-liknande ikon och startskärm.</p>
+        <ol class="install-steps">
+          <li>Öppna <strong>https://betsel.fortiddns.com</strong> i Safari.</li>
+          <li>Tryck på delningsikonen (fyrkant med pil uppåt).</li>
+          <li>Välj <strong>Lägg till på hemskärmen</strong>.</li>
+          <li>Namnge om du vill och tryck <strong>Lägg till</strong>.</li>
+        </ol>
+        <p class="info">Ikonen hamnar på hemskärmen och öppnas som en egen "app" utan Safari-gränssnitt.</p>
+      </section>
+    </main>
+
+    <script src="app-installation.js"></script>
+  </body>
+</html>

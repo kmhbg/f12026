@@ -1,1 +1,3 @@
 data/bets.json
+public/downloads/*.apk
+node_modules/
