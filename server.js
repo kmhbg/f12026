@@ -53,8 +53,11 @@ let cachedStandingsAt = 0;
 let sessionsInFlight = null;
 let meetingsInFlight = null;
 let driversInFlight = null;
+let cachedRaceStandings = null;
+let cachedRaceStandingsAt = 0;
 
 const STANDINGS_TTL_MS = 15 * 60 * 1000;
+const RACE_STANDINGS_TTL_MS = 10 * 60 * 1000;
 const OPENF1_MIN_INTERVAL_MS = 400;
 
 let openF1Queue = Promise.resolve();
@@ -325,6 +328,88 @@ async function loadSessionResult(sessionKey) {
   }
 }
 
+async function loadRaceStandings(db) {
+  const now = Date.now();
+  if (cachedRaceStandings && now - cachedRaceStandingsAt < RACE_STANDINGS_TTL_MS) {
+    return cachedRaceStandings;
+  }
+
+  const sessions = await loadSessions();
+  const nowDate = new Date();
+  const pastSessions = sessions.filter((s) => {
+    const rawDate = s.date_start || s.session_start_utc;
+    if (!rawDate) return false;
+    return new Date(rawDate) <= nowDate;
+  });
+
+  const sessionByKey = new Map(
+    pastSessions.map((s) => [String(s.session_key), s])
+  );
+
+  const raceResults = [];
+  for (const session of pastSessions) {
+    const sessionKey = session.session_key;
+    if (!sessionKey) continue;
+    const results = await loadSessionResult(sessionKey);
+    if (!results || results.length < 3) continue;
+    const top3 = results.slice(0, 3).map((r) => Number(r.driver_number));
+    raceResults.push({
+      sessionKey: String(sessionKey),
+      raceName: session.meeting_name || session.circuit_short_name || "Race",
+      date: session.date_start || session.session_start_utc || null,
+      resultTop3: top3
+    });
+  }
+
+  const pointsByUser = new Map();
+  const winsByUser = new Map();
+
+  raceResults.forEach((race) => {
+    const bets = db.raceBets.filter(
+      (b) =>
+        b.seasonYear === SEASON_YEAR &&
+        String(b.session_key) === String(race.sessionKey)
+    );
+    const winners = bets.filter(
+      (b) =>
+        Number(b.p1_driver_number) === race.resultTop3[0] &&
+        Number(b.p2_driver_number) === race.resultTop3[1] &&
+        Number(b.p3_driver_number) === race.resultTop3[2]
+    );
+
+    const winnerIds = winners.map((w) => w.userId);
+    winnerIds.forEach((userId) => {
+      pointsByUser.set(userId, (pointsByUser.get(userId) || 0) + 1);
+      if (!winsByUser.has(userId)) winsByUser.set(userId, []);
+      winsByUser.get(userId).push({
+        sessionKey: race.sessionKey,
+        raceName: race.raceName,
+        date: race.date
+      });
+    });
+
+    race.winners = winnerIds;
+    race.totalBets = bets.length;
+  });
+
+  const leaderboard = db.users
+    .map((u) => ({
+      userId: u.id,
+      name: u.name,
+      points: pointsByUser.get(u.id) || 0,
+      wins: winsByUser.get(u.id) || []
+    }))
+    .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+
+  cachedRaceStandings = {
+    updatedAt: Date.now(),
+    races: raceResults,
+    leaderboard
+  };
+  cachedRaceStandingsAt = Date.now();
+  return cachedRaceStandings;
+}
+
 function readBetsFile() {
   const raw = fs.readFileSync(betsFile, "utf-8");
   const data = JSON.parse(raw);
@@ -408,6 +493,22 @@ app.get("/api/standings", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load standings" });
+  }
+});
+
+app.get("/api/race/standings", async (req, res) => {
+  try {
+    const db = readBetsFile();
+    const standings = await loadRaceStandings(db);
+    res.json({
+      seasonYear: SEASON_YEAR,
+      updatedAt: standings.updatedAt,
+      races: standings.races,
+      leaderboard: standings.leaderboard
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load race standings" });
   }
 });
 

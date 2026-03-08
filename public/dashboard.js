@@ -9,7 +9,8 @@ const state = {
   teams: [],
   driverStandings: [],
   constructorStandings: [],
-  standingsUpdatedAt: null
+  standingsUpdatedAt: null,
+  raceStandings: null
 };
 
 function $(id) {
@@ -55,6 +56,12 @@ async function loadStandings() {
   state.driverStandings = data.drivers || [];
   state.constructorStandings = data.constructors || [];
   state.standingsUpdatedAt = data.updatedAt || null;
+}
+
+async function loadRaceStandings() {
+  const res = await fetch(`${API_BASE}/race/standings`);
+  const data = await res.json();
+  state.raceStandings = data || null;
 }
 
 function buildDriverStandingsMap() {
@@ -238,6 +245,40 @@ function buildUserCard(user, bet, driverMap, constructorMap) {
   card.appendChild(driverSection);
   card.appendChild(teamSection);
 
+  if (state.raceStandings && Array.isArray(state.raceStandings.leaderboard)) {
+    const entry = state.raceStandings.leaderboard.find(
+      (e) => e.userId === user.id
+    );
+    const raceSection = document.createElement("div");
+    raceSection.className = "section-block";
+
+    const raceTitle = document.createElement("h4");
+    raceTitle.textContent = "Racebet";
+    raceSection.appendChild(raceTitle);
+
+    const points = entry ? entry.points : 0;
+    const wins = entry ? entry.wins.length : 0;
+    const totalScore = entry ? entry.totalScore : points;
+    const raceInfo = document.createElement("p");
+    raceInfo.className = "info";
+    raceInfo.textContent = `Poäng: ${points} · Vinster: ${wins} · Total: ${totalScore}`;
+    raceSection.appendChild(raceInfo);
+
+    if (entry && entry.wins.length > 0) {
+      const winsList = document.createElement("ul");
+      winsList.className = "info";
+      entry.wins.slice(0, 5).forEach((w) => {
+        const item = document.createElement("li");
+        const date = w.date ? new Date(w.date).toLocaleDateString() : "";
+        item.textContent = `${w.raceName}${date ? ` (${date})` : ""}`;
+        winsList.appendChild(item);
+      });
+      raceSection.appendChild(winsList);
+    }
+
+    card.appendChild(raceSection);
+  }
+
   return card;
 }
 
@@ -256,6 +297,76 @@ function renderDashboard() {
     updatedEl.textContent = "";
   }
 
+  const raceUpdatedEl = $("race-updated");
+  const raceTableBody = $("race-leaderboard").querySelector("tbody");
+  raceTableBody.innerHTML = "";
+
+  const totalScores = new Map();
+  state.users.forEach((user) => {
+    const bet = state.seasonBets.find(
+      (b) => b.userId === user.id && (!state.seasonYear || b.seasonYear === state.seasonYear)
+    );
+    let driverTotal = 0;
+    let driverCount = 0;
+    let teamTotal = 0;
+    let teamCount = 0;
+    if (bet) {
+      (bet.driverPredictions || []).forEach((p) => {
+        const actual =
+          driverMap.byNumber.get(Number(p.driver_number)) ||
+          driverMap.byName.get(normalizeKey(getDriverName(p.driver_number)));
+        if (actual) {
+          driverTotal += Math.abs(actual - Number(p.predictedPosition));
+          driverCount += 1;
+        }
+      });
+      (bet.teamPredictions || []).forEach((p) => {
+        const actual = constructorMap.get(normalizeKey(p.team_name));
+        if (actual) {
+          teamTotal += Math.abs(actual - Number(p.predictedPosition));
+          teamCount += 1;
+        }
+      });
+    }
+    const seasonScore =
+      driverCount + teamCount > 0 ? driverTotal + teamTotal : null;
+    totalScores.set(user.id, seasonScore);
+  });
+
+  if (state.raceStandings && Array.isArray(state.raceStandings.leaderboard)) {
+    const leaderboardWithTotal = state.raceStandings.leaderboard.map((entry) => {
+      const seasonScore = totalScores.get(entry.userId);
+      const totalScore =
+        seasonScore === null ? entry.points : entry.points - seasonScore;
+      return { ...entry, totalScore, seasonScore };
+    });
+
+    leaderboardWithTotal.forEach((entry, index) => {
+      const tr = document.createElement("tr");
+      const winsCount = entry.wins ? entry.wins.length : 0;
+      const totalValue =
+        entry.seasonScore === null
+          ? `${entry.points} (race)`
+          : `${entry.totalScore.toFixed(1)} (race - diff)`;
+      tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td>${entry.name}</td>
+        <td>${entry.points}</td>
+        <td>${winsCount}</td>
+        <td>${totalValue}</td>
+      `;
+      raceTableBody.appendChild(tr);
+    });
+    if (state.raceStandings.updatedAt) {
+      const date = new Date(state.raceStandings.updatedAt);
+      raceUpdatedEl.textContent = `Uppdaterad: ${date.toLocaleString()}`;
+    } else {
+      raceUpdatedEl.textContent = "";
+    }
+  } else {
+    raceUpdatedEl.textContent = "Inga race-resultat ännu.";
+  }
+
   state.users.forEach((user) => {
     const bet = state.seasonBets.find(
       (b) => b.userId === user.id && (!state.seasonYear || b.seasonYear === state.seasonYear)
@@ -266,6 +377,6 @@ function renderDashboard() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  await Promise.all([loadMetadata(), loadSummary(), loadStandings()]);
+  await Promise.all([loadMetadata(), loadSummary(), loadStandings(), loadRaceStandings()]);
   renderDashboard();
 });
