@@ -13,7 +13,7 @@ APP_DIR="${APP_DIR:-/var/www/f1-betting-2026}"
 CADDY_USER="${CADDY_USER:-www-data}"
 SERVICE_NAME="f1-betting"
 # Sätt till din riktiga GitHub-URL för projektet:
-GIT_URL="${GIT_URL:-https://github.com/DITT-ACCOUNT/f1-betting-2026.git}"
+GIT_URL="${GIT_URL:-https://github.com/kmhbg/f1-betting-2026.git}"
 
 echo "=== F1 Betting 2026 – Installerar i $APP_DIR ==="
 
