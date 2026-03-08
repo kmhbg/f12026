@@ -3,6 +3,7 @@ const API_BASE = "/api";
 const adminState = {
   seasonYear: null,
   seasonLocked: false,
+  seasonOverrideOpen: false,
   users: [],
   sessions: [],
   drivers: [],
@@ -14,18 +15,27 @@ function $(id) {
   return document.getElementById(id);
 }
 
+function wrapTable(table) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "table-scroll";
+  wrapper.appendChild(table);
+  return wrapper;
+}
+
 async function loadMetadata() {
   const res = await fetch(`${API_BASE}/metadata`);
   const data = await res.json();
 
   adminState.seasonYear = data.seasonYear;
   adminState.seasonLocked = !!data.seasonLocked;
+  adminState.seasonOverrideOpen = !!data.seasonOverrideOpen;
   adminState.users = data.users;
   adminState.sessions = data.sessions;
   adminState.drivers = data.drivers;
 
   populateUserSelects();
   populateRaceSelect();
+  updateSeasonOverrideUI();
 }
 
 function populateUserSelects() {
@@ -196,62 +206,75 @@ function renderSummary() {
     adminState.drivers.map((d) => [Number(d.driver_number), d])
   );
 
-  // Årsbett per användare
-  const seasonTable = document.createElement("table");
-  seasonTable.innerHTML = `
-    <thead>
-      <tr>
-        <th>Användare</th>
-        <th>Förare (pos → förare)</th>
-        <th>Stall (pos → team)</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  `;
-  const seasonBody = seasonTable.querySelector("tbody");
-
+  // Årsbett per användare (egen tabell per användare)
   adminState.summary.users.forEach((u) => {
     const bet = adminState.summary.seasonBets.find(
       (b) => b.userId === u.id && b.seasonYear === adminState.summary.seasonYear
     );
 
-    const tr = document.createElement("tr");
-    const tdUser = document.createElement("td");
-    tdUser.textContent = u.name;
-    tr.appendChild(tdUser);
+    const wrapper = document.createElement("div");
+    wrapper.className = "section-block";
 
-    const tdDrivers = document.createElement("td");
+    const heading = document.createElement("h4");
+    heading.textContent = u.name;
+    wrapper.appendChild(heading);
+
+    const driverMap = new Map();
+    const teamMap = new Map();
+
     if (bet && Array.isArray(bet.driverPredictions)) {
-      const parts = bet.driverPredictions
-        .slice()
-        .sort((a, b) => a.predictedPosition - b.predictedPosition)
-        .map((p) => {
-          const d = driverByNumber.get(Number(p.driver_number));
-          const name = d ? d.full_name : `#${p.driver_number}`;
-          return `${p.predictedPosition}: ${name}`;
-        });
-      tdDrivers.textContent = parts.join(", ");
-    } else {
-      tdDrivers.textContent = "-";
+      bet.driverPredictions.forEach((p) => {
+        const d = driverByNumber.get(Number(p.driver_number));
+        const name = d ? d.full_name : `#${p.driver_number}`;
+        driverMap.set(Number(p.predictedPosition), name);
+      });
     }
-    tr.appendChild(tdDrivers);
 
-    const tdTeams = document.createElement("td");
     if (bet && Array.isArray(bet.teamPredictions)) {
-      const parts = bet.teamPredictions
-        .slice()
-        .sort((a, b) => a.predictedPosition - b.predictedPosition)
-        .map((p) => `${p.predictedPosition}: ${p.team_name}`);
-      tdTeams.textContent = parts.join(", ");
-    } else {
-      tdTeams.textContent = "-";
+      bet.teamPredictions.forEach((p) => {
+        teamMap.set(Number(p.predictedPosition), p.team_name);
+      });
     }
-    tr.appendChild(tdTeams);
 
-    seasonBody.appendChild(tr);
+    const maxPos = Math.max(
+      driverMap.size > 0 ? Math.max(...driverMap.keys()) : 0,
+      teamMap.size > 0 ? Math.max(...teamMap.keys()) : 0
+    );
+
+    const seasonTable = document.createElement("table");
+    seasonTable.innerHTML = `
+      <thead>
+        <tr>
+          <th>Pos</th>
+          <th>Förare</th>
+          <th>Stall</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    const seasonBody = seasonTable.querySelector("tbody");
+
+    if (maxPos === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="3">Inga årsbett.</td>`;
+      seasonBody.appendChild(tr);
+    } else {
+      for (let pos = 1; pos <= maxPos; pos += 1) {
+        const tr = document.createElement("tr");
+        const driverName = driverMap.get(pos) || "-";
+        const teamName = teamMap.get(pos) || "-";
+        tr.innerHTML = `
+          <td>${pos}</td>
+          <td>${driverName}</td>
+          <td>${teamName}</td>
+        `;
+        seasonBody.appendChild(tr);
+      }
+    }
+
+    wrapper.appendChild(wrapTable(seasonTable));
+    seasonContainer.appendChild(wrapper);
   });
-
-  seasonContainer.appendChild(seasonTable);
 
   // Racebett per race och användare
   const raceBetsBySession = new Map();
@@ -334,7 +357,7 @@ function renderSummary() {
           body.appendChild(tr);
         });
 
-      wrapper.appendChild(table);
+      wrapper.appendChild(wrapTable(table));
       racesContainer.appendChild(wrapper);
     });
 }
@@ -430,7 +453,50 @@ function renderSingleRaceSummary(sessionKey) {
       body.appendChild(tr);
     });
 
-  container.appendChild(table);
+  container.appendChild(wrapTable(table));
+}
+
+function updateSeasonOverrideUI() {
+  const btn = $("admin-season-override-btn");
+  const stateEl = $("admin-season-override-state");
+  if (!btn || !stateEl) return;
+
+  if (adminState.seasonOverrideOpen) {
+    btn.textContent = "Stäng årsbett";
+    stateEl.textContent = "Årsbett är tillfälligt öppna.";
+  } else {
+    btn.textContent = "Öppna årsbett";
+    stateEl.textContent = "Årsbett är låsta enligt säsongsstart.";
+  }
+}
+
+async function toggleSeasonOverride() {
+  const statusEl = $("admin-season-override-status");
+  const nextValue = !adminState.seasonOverrideOpen;
+
+  try {
+    const res = await fetch(`${API_BASE}/settings/season-override`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: nextValue })
+    });
+
+    if (!res.ok) {
+      statusEl.textContent = "Kunde inte uppdatera årsbett-status.";
+      return;
+    }
+
+    const data = await res.json();
+    adminState.seasonOverrideOpen = !!data.seasonOverrideOpen;
+    updateSeasonOverrideUI();
+    statusEl.textContent = "Status uppdaterad.";
+    setTimeout(() => {
+      statusEl.textContent = "";
+    }, 3000);
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Ett fel uppstod vid uppdatering.";
+  }
 }
 
 function adminShowRaceSummary() {
@@ -456,6 +522,10 @@ function setupAdminListeners() {
   $("admin-delete-user-btn").addEventListener("click", adminDeleteUser);
   $("admin-load-summary-btn").addEventListener("click", loadSummary);
   $("admin-show-race-btn").addEventListener("click", adminShowRaceSummary);
+  const seasonOverrideBtn = $("admin-season-override-btn");
+  if (seasonOverrideBtn) {
+    seasonOverrideBtn.addEventListener("click", toggleSeasonOverride);
+  }
 }
 
 window.addEventListener("DOMContentLoaded", async () => {

@@ -41,7 +41,16 @@ fi
 if [ -d "$APP_DIR/.git" ]; then
   echo "Hittade befintligt git-repo i $APP_DIR – uppdaterar med git pull..."
   cd "$APP_DIR"
+  # Backup av data/bets.json innan pull för att behålla lokala data
+  if [ -f "data/bets.json" ]; then
+    cp "data/bets.json" "/tmp/bets.json.backup"
+  fi
   git pull --ff-only || echo "Varning: git pull misslyckades, kontrollera manuellt."
+  if [ -f "/tmp/bets.json.backup" ]; then
+    mkdir -p data
+    cp "/tmp/bets.json.backup" "data/bets.json"
+    rm -f "/tmp/bets.json.backup"
+  fi
 else
   echo "Klonar projektet från $GIT_URL till $APP_DIR ..."
   sudo mkdir -p "$APP_DIR"

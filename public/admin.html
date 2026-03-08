@@ -2,12 +2,19 @@
 <html lang="sv">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>F1 Betting 2026 – Admin</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header>
-      <h1>F1 Betting 2026 – Admin</h1>
+      <div class="header-row">
+        <h1>F1 Betting 2026 – Admin</h1>
+        <nav class="header-nav">
+          <a href="/index.html">Spel</a>
+          <a href="/dashboard.html">Dashboard</a>
+        </nav>
+      </div>
     </header>
 
     <main>
@@ -35,7 +42,26 @@
           <button id="admin-delete-user-btn">Ta bort</button>
         </div>
 
+        <div class="section-block">
+          <h3>Årsbett – tillfällig öppning</h3>
+          <p class="info">
+            Använd detta om säsongen redan har startat men någon ändå behöver
+            lägga sitt årsbett.
+          </p>
+          <div class="user-manage-row">
+            <button id="admin-season-override-btn" type="button"></button>
+            <span id="admin-season-override-status" class="status"></span>
+          </div>
+          <p id="admin-season-override-state" class="info"></p>
+        </div>
+
         <p id="admin-user-status" class="status"></p>
+      </section>
+
+      <section class="section-block">
+        <h2>Rättning</h2>
+        <p class="info">Öppna rättning av racebet här:</p>
+        <a href="/settlement.html">Rättning racebet</a>
       </section>
 
       <section id="admin-summary-section">

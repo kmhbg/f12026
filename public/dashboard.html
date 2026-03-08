@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="sv">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>F1 Betting 2026 – Årsbett Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="header-row">
+        <h1>F1 Betting 2026 – Årsbett Dashboard</h1>
+        <nav class="header-nav">
+          <a href="/index.html">Spel</a>
+          <a href="/settlement.html">Rättning</a>
+          <a href="/dashboard.html" class="active">Dashboard</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="section-block">
+        <h2>Sammanställning mot tabellen</h2>
+        <p class="info">
+          Visar nuvarande ställning jämfört med respektive användares årsbett.
+        </p>
+        <p id="dashboard-updated" class="info"></p>
+      </section>
+
+      <section id="dashboard-container" class="dashboard-grid"></section>
+    </main>
+
+    <script src="dashboard.js"></script>
+  </body>
+</html>

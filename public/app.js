@@ -3,6 +3,7 @@ const API_BASE = "/api";
 const state = {
   seasonYear: null,
   seasonLocked: false,
+  seasonOverrideOpen: false,
   users: [],
   currentUserId: null,
   sessions: [],
@@ -29,6 +30,7 @@ async function loadMetadata() {
 
   state.seasonYear = data.seasonYear;
   state.seasonLocked = !!data.seasonLocked;
+  state.seasonOverrideOpen = !!data.seasonOverrideOpen;
   state.users = data.users;
   state.sessions = data.sessions;
   state.drivers = data.drivers;
@@ -123,7 +125,11 @@ function renderSeasonBet() {
       input.max = "30";
       input.value = driverMap.get(d.driver_number) || "";
       input.dataset.driverNumber = d.driver_number;
-      if (state.seasonLocked) input.disabled = true;
+      input.dataset.positionType = "driver";
+      if (state.seasonLocked && !state.seasonOverrideOpen) input.disabled = true;
+      input.addEventListener("change", () => {
+        enforceUniquePositions(input.dataset.positionType, input);
+      });
       tdPos.appendChild(input);
       tr.appendChild(tdPos);
 
@@ -144,12 +150,70 @@ function renderSeasonBet() {
     input.max = "20";
     input.value = teamMap.get(team) || "";
     input.dataset.teamName = team;
-    if (state.seasonLocked) input.disabled = true;
+    input.dataset.positionType = "team";
+    if (state.seasonLocked && !state.seasonOverrideOpen) input.disabled = true;
+    input.addEventListener("change", () => {
+      enforceUniquePositions(input.dataset.positionType, input);
+    });
     tdPos.appendChild(input);
     tr.appendChild(tdPos);
 
     teamsBody.appendChild(tr);
   });
+}
+
+function enforceUniquePositions(type, changedInput) {
+  const selector =
+    type === "driver"
+      ? "input[data-driver-number]"
+      : "input[data-team-name]";
+  const tableId = type === "driver" ? "drivers-table" : "teams-table";
+  const inputs = Array.from($(tableId).querySelectorAll(selector));
+  const seen = new Set();
+  let duplicateFound = false;
+
+  inputs.forEach((input) => {
+    const value = Number(input.value);
+    if (!value) return;
+    if (seen.has(value)) {
+      if (input === changedInput) {
+        input.value = "";
+      }
+      duplicateFound = true;
+    } else {
+      seen.add(value);
+    }
+  });
+
+  if (duplicateFound) {
+    const status = $("season-status");
+    if (status) {
+      status.textContent =
+        type === "driver"
+          ? "Samma placering kan bara användas en gång per förare."
+          : "Samma placering kan bara användas en gång per stall.";
+      setTimeout(() => {
+        status.textContent = "";
+      }, 3000);
+    }
+  }
+}
+
+function hasDuplicatePositions(type) {
+  const selector =
+    type === "driver"
+      ? "input[data-driver-number]"
+      : "input[data-team-name]";
+  const tableId = type === "driver" ? "drivers-table" : "teams-table";
+  const inputs = Array.from($(tableId).querySelectorAll(selector));
+  const seen = new Set();
+  for (const input of inputs) {
+    const value = Number(input.value);
+    if (!value) continue;
+    if (seen.has(value)) return true;
+    seen.add(value);
+  }
+  return false;
 }
 
 function getSelectedRaceDrivers() {
@@ -199,7 +263,7 @@ function updateSeasonLockInfo() {
 
   if (!infoEl || !saveBtn || !tabSeason || !seasonSection || !tabRace) return;
 
-  if (state.seasonLocked) {
+  if (state.seasonLocked && !state.seasonOverrideOpen) {
     infoEl.textContent = "Säsongen har startat – årsbet är låst och kan inte ändras.";
     saveBtn.disabled = true;
     // Dölj årsbet-fliken och sektionen helt i vanliga gränssnittet
@@ -213,7 +277,12 @@ function updateSeasonLockInfo() {
       seasonSection.classList.add("hidden");
     }
   } else {
-    infoEl.textContent = "";
+    if (state.seasonLocked && state.seasonOverrideOpen) {
+      infoEl.textContent =
+        "Årsbett är tillfälligt öppna av admin – du kan ändra ditt årsbett.";
+    } else {
+      infoEl.textContent = "";
+    }
     saveBtn.disabled = false;
     tabSeason.style.display = "";
   }
@@ -302,15 +371,16 @@ function setupEventListeners() {
     const raceBtn = $("tab-race");
 
     if (state.currentUserId) {
-      seasonBtn.disabled = state.seasonLocked;
+      seasonBtn.disabled = state.seasonLocked && !state.seasonOverrideOpen;
       raceBtn.disabled = false;
 
-      if (!state.seasonLocked) {
+      if (!state.seasonLocked || state.seasonOverrideOpen) {
         await loadSeasonBetForUser(state.currentUserId);
         openTab("season");
       } else {
         openTab("race");
       }
+
     } else {
       seasonBtn.disabled = true;
       raceBtn.disabled = true;
@@ -353,9 +423,14 @@ function openTab(name) {
 
 async function saveSeasonBet() {
   if (!state.currentUserId) return;
-  if (state.seasonLocked) {
+  if (state.seasonLocked && !state.seasonOverrideOpen) {
     $("season-status").textContent =
       "Säsongen har startat – du kan inte längre ändra årsbet.";
+    return;
+  }
+  if (hasDuplicatePositions("driver") || hasDuplicatePositions("team")) {
+    $("season-status").textContent =
+      "Varje placering får bara användas en gång per lista.";
     return;
   }
 

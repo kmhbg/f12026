@@ -15,6 +15,33 @@ h1 {
   margin: 0;
 }
 
+.header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.header-nav {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.header-nav a {
+  color: #f5f5f5;
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  background: #262634;
+}
+
+.header-nav a.active {
+  background: #e10600;
+}
+
 main {
   padding: 1.5rem 2rem;
   max-width: 1000px;
@@ -65,6 +92,12 @@ table {
   font-size: 0.9rem;
 }
 
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 th,
 td {
   border-bottom: 1px solid #262634;
@@ -83,6 +116,14 @@ select {
   border: 1px solid #3c4a5a;
   border-radius: 4px;
   padding: 0.2rem 0.3rem;
+}
+
+input[type="text"] {
+  background: #111111;
+  color: #f5f5f5;
+  border: 1px solid #3c4a5a;
+  border-radius: 4px;
+  padding: 0.4rem 0.5rem;
 }
 
 button {
@@ -146,3 +187,98 @@ button {
   border-radius: 6px;
 }
 
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.dashboard-card {
+  background: #15151e;
+  border-radius: 8px;
+  border: 1px solid #262634;
+  padding: 1rem 1.2rem;
+}
+
+.dashboard-card h3 {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard-card h4 {
+  margin: 0 0 0.5rem 0;
+}
+
+@media (max-width: 768px) {
+  header {
+    padding: 0.85rem 1rem;
+  }
+
+  main {
+    padding: 1rem;
+  }
+
+  section {
+    padding: 0.85rem 1rem;
+  }
+
+  .header-row {
+    align-items: flex-start;
+  }
+
+  .header-nav {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .header-nav a {
+    padding: 0.25rem 0.45rem;
+  }
+
+  nav button {
+    margin-bottom: 0.5rem;
+  }
+
+  .user-manage-row {
+    flex-wrap: wrap;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+
+  select {
+    width: 100%;
+    min-height: 2.2rem;
+    font-size: 1rem;
+  }
+
+  input[type="text"] {
+    width: 100%;
+    min-height: 2.2rem;
+    font-size: 1rem;
+  }
+
+  .race-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.2rem;
+  }
+
+  nav button {
+    width: 100%;
+    margin-right: 0;
+  }
+
+  .user-manage-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

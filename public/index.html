@@ -2,12 +2,20 @@
 <html lang="sv">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>F1 Betting 2026</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header>
-      <h1>F1 Betting 2026</h1>
+      <div class="header-row">
+        <h1>F1 Betting 2026</h1>
+        <nav class="header-nav">
+          <a href="/index.html" class="active">Spel</a>
+          <a href="/settlement.html">Rättning</a>
+          <a href="/dashboard.html">Dashboard</a>
+        </nav>
+      </div>
     </header>
 
     <main>
@@ -30,7 +38,8 @@
 
         <div class="section-block">
           <h3>Förare</h3>
-          <table id="drivers-table">
+          <div class="table-scroll">
+            <table id="drivers-table">
             <thead>
               <tr>
                 <th>#</th>
@@ -41,12 +50,14 @@
               </tr>
             </thead>
             <tbody></tbody>
-          </table>
+            </table>
+          </div>
         </div>
 
         <div class="section-block">
           <h3>Stall</h3>
-          <table id="teams-table">
+          <div class="table-scroll">
+            <table id="teams-table">
             <thead>
               <tr>
                 <th>Team</th>
@@ -54,7 +65,8 @@
               </tr>
             </thead>
             <tbody></tbody>
-          </table>
+            </table>
+          </div>
         </div>
 
         <button id="save-season-btn">Spara årsbet</button>
