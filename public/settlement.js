@@ -79,12 +79,13 @@ function renderSettlement(data) {
     resultBody.appendChild(tr);
   });
 
-  if (settlement.winners.length === 0) {
+  const knownWinners = settlement.winners.filter((userId) => userById.has(userId));
+  if (knownWinners.length === 0) {
     const tr = document.createElement("tr");
     tr.innerHTML = `<td colspan="2">Inga vinnare.</td>`;
     winnersBody.appendChild(tr);
   } else {
-    settlement.winners.forEach((userId) => {
+    knownWinners.forEach((userId) => {
       const tr = document.createElement("tr");
       const user = userById.get(userId);
       const name = user ? user.name : userId;
