@@ -39,13 +39,14 @@ fi
 
 # Klona eller uppdatera från GitHub
 if [ -d "$APP_DIR/.git" ]; then
-  echo "Hittade befintligt git-repo i $APP_DIR – uppdaterar med git pull..."
+  echo "Hittade befintligt git-repo i $APP_DIR – hämtar senaste från GitHub..."
   cd "$APP_DIR"
   # Backup av data/bets.json innan pull för att behålla lokala data
   if [ -f "data/bets.json" ]; then
     cp "data/bets.json" "/tmp/bets.json.backup"
   fi
-  git pull --ff-only || echo "Varning: git pull misslyckades, kontrollera manuellt."
+  git fetch origin || echo "Varning: git fetch misslyckades, kontrollera manuellt."
+  git pull --ff-only origin main || echo "Varning: git pull misslyckades, kontrollera manuellt."
   if [ -f "/tmp/bets.json.backup" ]; then
     mkdir -p data
     cp "/tmp/bets.json.backup" "data/bets.json"
