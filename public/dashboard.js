@@ -377,6 +377,11 @@ function renderDashboard() {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.warn("Service worker registration failed", err);
+    });
+  }
   await Promise.all([loadMetadata(), loadSummary(), loadStandings(), loadRaceStandings()]);
   renderDashboard();
 });

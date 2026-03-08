@@ -119,6 +119,11 @@ async function loadSettlement(sessionKey) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.warn("Service worker registration failed", err);
+    });
+  }
   await loadMetadata();
   $("settlement-race-select").addEventListener("change", (e) => {
     loadSettlement(e.target.value);
