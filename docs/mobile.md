@@ -1,5 +1,41 @@
 # Mobilapp – guide
 
+## Branch-strategi (best practice)
+Vid större nya funktioner (t.ex. native iOS-app) är det **rekommenderat** att använda en **feature-branch**:
+
+- **Huvudprojektet (f12026):** `git checkout -b feature/native-ios-app` – använd denna branch för ändringar i server, webb och dokumentation kopplade till iOS-appen. När allt är klart: merge till `main` via pull request.
+- **f1_bet (eget repo):** Om f1_bet ligger i ett eget Git-repo kan du där köra `git checkout -b feature/native-ios-app` (eller liknande) för att hålla utvecklingen av iOS-appen isolerad.
+
+Det ger en stabil `main`, tydlig historik och enkel code review.
+
+---
+
+## Native iOS-app (Swift/SwiftUI) med SweetPad
+En **native iOS-app** finns i mappen **`f1_bet/`**. Den använder samma API som webbversionen och följer [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/) (HIG).
+
+### Krav
+- **macOS** med **Xcode** (för att bygga och köra på simulator eller enhet)
+- **SweetPad** (VSCode/Cursor-tillägg) om du vill bygga och köra från Cursor istället för Xcode: [SweetPad](https://sweetpad.hyzyla.dev/) – ger build/run, simulatorhantering och format i editorn
+
+### Bygga och köra
+1. Öppna `f1_bet/f1_bet.xcodeproj` i Xcode (eller använd SweetPad i Cursor).
+2. Välj simulator eller ansluten iPhone/iPad.
+3. Build & Run (⌘R).
+
+### Konfigurera server
+- I appen: **Inställningar** → ange serveradress (t.ex. `https://betsel.fortiddns.com` eller `http://localhost:3000` för utveckling).
+- Servern måste ha **CORS** aktiverat (redan gjort i `server.js` med `cors()`), så att appen får anropa API:et.
+
+### Funktionalitet
+- **Spel:** Välj användare → lägg årsbet (förare/stall) och racebet (top 3 per race).
+- **Dashboard:** Översikt över användare, poäng och race-resultat.
+- **Rättning:** Visa rättning per avslutat race (resultat, vinnare, pot).
+- **Inställningar:** Ändra API-serveradress.
+
+Admin-funktioner (användarhantering, season override, full rättning) finns kvar på webbgränssnittet.
+
+---
+
 ## Sidan "App-installation"
 Användare kan gå till **App** i menyn (eller `/app-installation.html`) för att:
 - **Android:** ladda ner APK-filen och installera (om du har lagt en byggd APK på servern).
