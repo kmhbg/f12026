@@ -1,6 +1,7 @@
 # F1 Betting 2026 – Caddy reverse proxy
 # Byta ut din.domain.se mot din egen domän eller IP.
 # Caddy skickar alla anrop vidare till Node-appen som kör på port 3000.
+# För betsel.fortiddns.com: se Caddyfile.betsel.example.
 
 {
 	# Globala inställningar (valfritt)

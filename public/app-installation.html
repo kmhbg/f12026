@@ -43,8 +43,29 @@
       </section>
 
       <section class="section-block">
-        <h2>iOS</h2>
-        <p class="info">På iPhone och iPad finns ingen nedladdningsbar appfil. Använd istället "Lägg till på hemskärmen" – då får du en app-liknande ikon och startskärm.</p>
+        <h2>iOS – AltStore (utan Apple Developer-konto)</h2>
+        <p class="info">Du behöver <strong>inte</strong> betala för Apple Developer. Bygg en .ipa i Xcode med ett <em>gratis</em> Apple ID (Development-export) och lägg den på servern – se <a href="/docs/altstore-utan-developer-konto.md">guiden</a>. Användare med <strong>AltStore</strong> (klassisk, från <a href="https://altstore.io/" target="_blank" rel="noopener">altstore.io</a>) kan lägga till källan nedan; AltStore signerar appen med deras eget Apple ID (förnyas var 7:e dag).</p>
+        <p>
+          <a href="altstore://source?url=https://betsel.fortiddns.com/altstore-source.json" class="button">Lägg till F1 Betting i AltStore</a>
+        </p>
+        <p class="info">Fungerar när du öppnar länken på enheten där AltStore är installerat. Du kan också i AltStore: Källor → + och ange <code>https://betsel.fortiddns.com/altstore-source.json</code>.</p>
+      </section>
+      <section class="section-block">
+        <h2>iOS – nedladdning av IPA (valfritt)</h2>
+        <p class="info">Om du redan har byggt en .ipa (t.ex. med gratis Apple ID enligt guiden ovan) kan användare också ladda ner filen direkt och öppna den i AltStore.</p>
+        <p>
+          <a id="app-download-ios" href="/downloads/f1_bet.ipa" class="button" download>Ladda ner F1 Betting för iOS (IPA)</a>
+        </p>
+        <p id="app-ios-unavailable" class="info hidden">IPA är inte tillgänglig ännu. Följ <a href="/docs/altstore-utan-developer-konto.md">guiden för att exportera .ipa utan Developer-konto</a> och lägg filen i <code>public/downloads/f1_bet.ipa</code> på servern.</p>
+      </section>
+      <section class="section-block">
+        <h2>iOS – AltStore PAL (EU, kräver Developer-konto)</h2>
+        <p class="info">I EU kan användare använda <strong>AltStore PAL</strong> från altstore.io. Det kräver att du som utvecklare har betalt Apple Developer-konto och notariserar appen – se <a href="https://faq.altstore.io/developers/distribute-with-altstore-pal" target="_blank" rel="noopener">AltStore PAL – Distribute</a>.</p>
+      </section>
+
+      <section class="section-block">
+        <h2>iOS – PWA (alla)</h2>
+        <p class="info">På iPhone och iPad kan du använda "Lägg till på hemskärmen" – då får du en app-liknande ikon och startskärm.</p>
         <ol class="install-steps">
           <li>Öppna <strong>https://betsel.fortiddns.com</strong> i Safari.</li>
           <li>Tryck på delningsikonen (fyrkant med pil uppåt).</li>

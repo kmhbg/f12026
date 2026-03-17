@@ -1,0 +1,26 @@
+{
+  "name": "F1 Betting",
+  "identifier": "com.nille.f1betting.source",
+  "sourceURL": "https://betsel.fortiddns.com/altstore-source.json",
+  "apps": [
+    {
+      "name": "F1 Betting",
+      "bundleIdentifier": "com.nille.f1-bet",
+      "developerName": "F1 Betting",
+      "subtitle": "F1-tipping med årsbett och racebet.",
+      "localizedDescription": "Native iOS-app för F1 Betting 2026. Spela med årsbett (förare/stall) och racebet (top 3 per race). Dashboard, rättning och inställningar. Anslut till din egen server (t.ex. betsel.fortiddns.com).",
+      "iconURL": "https://betsel.fortiddns.com/icons/icon-512.png",
+      "tintColor": "E10600",
+      "versions": [
+        {
+          "version": "1.0",
+          "date": "2026-03-15",
+          "localizedDescription": "Första AltStore-versionen.",
+          "downloadURL": "https://betsel.fortiddns.com/downloads/f1_bet.ipa",
+          "size": 52428800
+        }
+      ],
+      "beta": false
+    }
+  ]
+}

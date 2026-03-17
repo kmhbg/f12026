@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mörk F1-inspirerad design (samma som iOS-appen) -->
+    <color name="background">#0d0d0f</color>
+    <color name="cardBackground">#1c1c1f</color>
+    <color name="colorPrimary">#e10600</color>
+    <color name="colorPrimaryDark">#0d0d0f</color>
+    <color name="colorAccent">#e10600</color>
+    <color name="windowBackground">#0d0d0f</color>
+    <color name="statusBarBackground">#0d0d0f</color>
+    <color name="navigationBarBackground">#0d0d0f</color>
+</resources>
