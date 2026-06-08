@@ -1,0 +1,14 @@
+{
+  "users": [
+    { "id": "seb", "name": "Sebastian" },
+    { "id": "olle", "name": "Olle" },
+    { "id": "anna", "name": "Anna" }
+  ],
+  "seasonBets": [],
+  "raceBets": [],
+  "settings": {
+    "seasonOverrideOpen": false,
+    "racePot": 0,
+    "raceSettlements": {}
+  }
+}

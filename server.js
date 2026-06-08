@@ -5,7 +5,7 @@ const path = require("path");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const SEASON_YEAR = 2026;
 
 const dataDir = path.join(__dirname, "data");
