@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
-# Säker uppdatering av produktion (homelab) – behåller data/bets.json
+# Säker uppdatering av produktion (homelab / proxmox2) – behåller data/bets.json
+#
+# Cache: OpenF1 replay-data sparas i data/cache/sessions/ på värddisken
+# (samma sökväg som CACHE_DIR=data/cache i server.js). Vid Docker-deploy på
+# proxmox2, se docker-compose.yml med bind mount ./data/cache:/app/data/cache.
+#
+# OpenF1 MQTT: sätt i systemd drop-in eller /etc/environment (ej i git):
+#   OPENF1_USERNAME=din@email.com
+#   OPENF1_PASSWORD=ditt_openf1_lösenord
+# Se lib/openf1-mqtt-config.js och openf1.org/auth.html.
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/var/www/f1-betting-2026}"
@@ -21,6 +30,12 @@ if [ -f /tmp/bets.json.backup ]; then
   mkdir -p data
   cp /tmp/bets.json.backup data/bets.json
   echo "Återställde data/bets.json från backup"
+fi
+
+# Persistent replay-cache (OpenF1) – skrivs av www-data via systemd
+mkdir -p data/cache/sessions
+if command -v chown &>/dev/null && id www-data &>/dev/null; then
+  chown -R www-data:www-data data/cache 2>/dev/null || sudo chown -R www-data:www-data data/cache || true
 fi
 
 npm ci --omit=dev 2>/dev/null || npm install --omit=dev

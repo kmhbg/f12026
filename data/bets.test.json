@@ -1,0 +1,196 @@
+{
+  "users": [
+    { "id": "seb", "name": "Sebastian" },
+    { "id": "olle", "name": "Olle" },
+    { "id": "anna", "name": "Anna" }
+  ],
+  "seasonBets": [
+    {
+      "userId": "seb",
+      "seasonYear": 2026,
+      "createdAt": "2026-02-20T18:00:00.000Z",
+      "updatedAt": "2026-02-20T18:00:00.000Z",
+      "driverPredictions": [
+        { "predictedPosition": 1, "driver_number": 81 },
+        { "predictedPosition": 2, "driver_number": 1 },
+        { "predictedPosition": 3, "driver_number": 3 },
+        { "predictedPosition": 4, "driver_number": 63 },
+        { "predictedPosition": 5, "driver_number": 16 },
+        { "predictedPosition": 6, "driver_number": 44 },
+        { "predictedPosition": 7, "driver_number": 12 },
+        { "predictedPosition": 8, "driver_number": 14 },
+        { "predictedPosition": 9, "driver_number": 55 },
+        { "predictedPosition": 10, "driver_number": 27 },
+        { "predictedPosition": 11, "driver_number": 23 }
+      ],
+      "teamPredictions": [
+        { "predictedPosition": 1, "team_name": "McLaren" },
+        { "predictedPosition": 2, "team_name": "Ferrari" },
+        { "predictedPosition": 3, "team_name": "Mercedes" },
+        { "predictedPosition": 4, "team_name": "Red Bull Racing" },
+        { "predictedPosition": 5, "team_name": "Williams" },
+        { "predictedPosition": 6, "team_name": "Audi" }
+      ]
+    },
+    {
+      "userId": "olle",
+      "seasonYear": 2026,
+      "createdAt": "2026-02-21T10:30:00.000Z",
+      "updatedAt": "2026-02-21T10:30:00.000Z",
+      "driverPredictions": [
+        { "predictedPosition": 1, "driver_number": 3 },
+        { "predictedPosition": 2, "driver_number": 81 },
+        { "predictedPosition": 3, "driver_number": 1 },
+        { "predictedPosition": 4, "driver_number": 16 },
+        { "predictedPosition": 5, "driver_number": 44 },
+        { "predictedPosition": 6, "driver_number": 63 },
+        { "predictedPosition": 7, "driver_number": 12 },
+        { "predictedPosition": 8, "driver_number": 6 },
+        { "predictedPosition": 9, "driver_number": 14 },
+        { "predictedPosition": 10, "driver_number": 55 },
+        { "predictedPosition": 11, "driver_number": 10 }
+      ],
+      "teamPredictions": [
+        { "predictedPosition": 1, "team_name": "Red Bull Racing" },
+        { "predictedPosition": 2, "team_name": "McLaren" },
+        { "predictedPosition": 3, "team_name": "Ferrari" },
+        { "predictedPosition": 4, "team_name": "Mercedes" },
+        { "predictedPosition": 5, "team_name": "Aston Martin" },
+        { "predictedPosition": 6, "team_name": "Williams" }
+      ]
+    },
+    {
+      "userId": "anna",
+      "seasonYear": 2026,
+      "createdAt": "2026-02-22T08:15:00.000Z",
+      "updatedAt": "2026-02-22T08:15:00.000Z",
+      "driverPredictions": [
+        { "predictedPosition": 1, "driver_number": 1 },
+        { "predictedPosition": 2, "driver_number": 81 },
+        { "predictedPosition": 3, "driver_number": 63 },
+        { "predictedPosition": 4, "driver_number": 3 },
+        { "predictedPosition": 5, "driver_number": 12 },
+        { "predictedPosition": 6, "driver_number": 44 },
+        { "predictedPosition": 7, "driver_number": 16 },
+        { "predictedPosition": 8, "driver_number": 55 },
+        { "predictedPosition": 9, "driver_number": 23 },
+        { "predictedPosition": 10, "driver_number": 14 },
+        { "predictedPosition": 11, "driver_number": 87 }
+      ],
+      "teamPredictions": [
+        { "predictedPosition": 1, "team_name": "McLaren" },
+        { "predictedPosition": 2, "team_name": "Mercedes" },
+        { "predictedPosition": 3, "team_name": "Ferrari" },
+        { "predictedPosition": 4, "team_name": "Red Bull Racing" },
+        { "predictedPosition": 5, "team_name": "Haas F1 Team" },
+        { "predictedPosition": 6, "team_name": "Alpine" }
+      ]
+    }
+  ],
+  "raceBets": [
+    {
+      "userId": "seb",
+      "seasonYear": 2026,
+      "session_key": 11234,
+      "raceName": "Australian Grand Prix",
+      "p1_driver_number": 81,
+      "p2_driver_number": 1,
+      "p3_driver_number": 3,
+      "createdAt": "2026-03-07T12:00:00.000Z",
+      "updatedAt": "2026-03-07T12:00:00.000Z"
+    },
+    {
+      "userId": "olle",
+      "seasonYear": 2026,
+      "session_key": 11234,
+      "raceName": "Australian Grand Prix",
+      "p1_driver_number": 3,
+      "p2_driver_number": 81,
+      "p3_driver_number": 1,
+      "createdAt": "2026-03-07T14:00:00.000Z",
+      "updatedAt": "2026-03-07T14:00:00.000Z"
+    },
+    {
+      "userId": "anna",
+      "seasonYear": 2026,
+      "session_key": 11234,
+      "raceName": "Australian Grand Prix",
+      "p1_driver_number": 1,
+      "p2_driver_number": 63,
+      "p3_driver_number": 81,
+      "createdAt": "2026-03-07T16:00:00.000Z",
+      "updatedAt": "2026-03-07T16:00:00.000Z"
+    },
+    {
+      "userId": "seb",
+      "seasonYear": 2026,
+      "session_key": 11245,
+      "raceName": "Chinese Grand Prix",
+      "p1_driver_number": 81,
+      "p2_driver_number": 3,
+      "p3_driver_number": 16,
+      "createdAt": "2026-03-14T10:00:00.000Z",
+      "updatedAt": "2026-03-14T10:00:00.000Z"
+    },
+    {
+      "userId": "olle",
+      "seasonYear": 2026,
+      "session_key": 11245,
+      "raceName": "Chinese Grand Prix",
+      "p1_driver_number": 3,
+      "p2_driver_number": 1,
+      "p3_driver_number": 81,
+      "createdAt": "2026-03-14T11:00:00.000Z",
+      "updatedAt": "2026-03-14T11:00:00.000Z"
+    },
+    {
+      "userId": "anna",
+      "seasonYear": 2026,
+      "session_key": 11245,
+      "raceName": "Chinese Grand Prix",
+      "p1_driver_number": 63,
+      "p2_driver_number": 81,
+      "p3_driver_number": 44,
+      "createdAt": "2026-03-14T12:00:00.000Z",
+      "updatedAt": "2026-03-14T12:00:00.000Z"
+    },
+    {
+      "userId": "seb",
+      "seasonYear": 2026,
+      "session_key": 11253,
+      "raceName": "Japanese Grand Prix",
+      "p1_driver_number": 1,
+      "p2_driver_number": 81,
+      "p3_driver_number": 63,
+      "createdAt": "2026-03-28T09:00:00.000Z",
+      "updatedAt": "2026-03-28T09:00:00.000Z"
+    },
+    {
+      "userId": "olle",
+      "seasonYear": 2026,
+      "session_key": 11253,
+      "raceName": "Japanese Grand Prix",
+      "p1_driver_number": 3,
+      "p2_driver_number": 16,
+      "p3_driver_number": 1,
+      "createdAt": "2026-03-28T10:00:00.000Z",
+      "updatedAt": "2026-03-28T10:00:00.000Z"
+    },
+    {
+      "userId": "anna",
+      "seasonYear": 2026,
+      "session_key": 11253,
+      "raceName": "Japanese Grand Prix",
+      "p1_driver_number": 81,
+      "p2_driver_number": 1,
+      "p3_driver_number": 3,
+      "createdAt": "2026-03-28T11:00:00.000Z",
+      "updatedAt": "2026-03-28T11:00:00.000Z"
+    }
+  ],
+  "settings": {
+    "seasonOverrideOpen": false,
+    "racePot": 150,
+    "raceSettlements": {}
+  }
+}

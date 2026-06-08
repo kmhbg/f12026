@@ -67,7 +67,7 @@ echo "Installerar npm-beroenden..."
 npm ci --omit=dev 2>/dev/null || npm install --omit=dev
 
 # Säkerställ data-katalog och rättigheter
-mkdir -p data
+mkdir -p data data/cache/sessions
 touch data/bets.json
 chown -R "$CADDY_USER:$CADDY_USER" "$INSTALL_DIR" 2>/dev/null || true
 

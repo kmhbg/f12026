@@ -12,6 +12,10 @@ Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=3000
+Environment=CACHE_DIR=data/cache
+# OpenF1 MQTT (valfritt, via drop-in override – aldrig lösenord i denna fil):
+# Environment=OPENF1_USERNAME=din@email.com
+# Environment=OPENF1_PASSWORD=...
 
 [Install]
 WantedBy=multi-user.target

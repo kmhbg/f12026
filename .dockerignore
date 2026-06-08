@@ -1,0 +1,17 @@
+node_modules
+data/cache/*
+!data/cache/sessions/
+!data/cache/sessions/**
+!data/cache/.gitkeep
+.git
+.github
+.azure
+android
+ios
+capacitor.config.json
+*.md
+docs
+deploy
+.DS_Store
+.env
+.env.*

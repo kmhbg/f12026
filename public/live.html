@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <title>F1 Betting 2026 – Live</title>
+    <title>F1 Betting 2026 – Pit Wall</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -31,7 +31,7 @@
             <a href="/index.html" class="nav-link">Spel</a>
             <a href="/settlement.html" class="nav-link">Rättning</a>
             <a href="/dashboard.html" class="nav-link">Dashboard</a>
-            <a href="/live.html" class="nav-link active">Live</a>
+            <a href="/live.html" class="nav-link active">Pit Wall</a>
             <a href="/app-installation.html" class="nav-link">App</a>
           </nav>
         </div>
@@ -43,39 +43,307 @@
     </header>
 
     <main>
-      <h1 class="page-title">Live</h1>
+      <h1 class="page-title">Pit Wall – race-analys</h1>
+
       <section class="section-block">
         <h2>Session</h2>
+        <div class="live-session-controls">
+          <label for="live-session-type-filter" class="info">Sessionstyp</label>
+          <select id="live-session-type-filter" aria-label="Filtrera sessionstyp">
+            <option value="all">Alla typer</option>
+            <option value="practice">Träning (FP1–3)</option>
+            <option value="qualifying">Kvalificering</option>
+            <option value="sprint">Sprint</option>
+            <option value="race">Race</option>
+          </select>
+          <label for="live-session-select" class="info">Välj session</label>
+          <select id="live-session-select" aria-label="Välj session">
+            <option value="latest">Senaste / live</option>
+          </select>
+        </div>
+        <div id="live-replay-controls" class="live-replay-controls hidden" aria-label="Replay-kontroller">
+          <div id="live-cache-loading" class="live-cache-loading hidden" aria-live="polite">
+            <p id="live-cache-loading-label" class="info">Bygger cache för replay…</p>
+            <progress id="live-cache-progress" max="100" value="0"></progress>
+          </div>
+          <div class="live-replay-toolbar">
+            <button type="button" id="live-replay-play" class="replay-btn" aria-label="Spela/pausa">▶</button>
+            <input type="range" id="live-replay-scrubber" min="0" max="100" value="0" aria-label="Tidslinje" />
+            <select id="live-replay-speed" aria-label="Uppspelningshastighet">
+              <option value="1">1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+            </select>
+          </div>
+          <p id="live-replay-time" class="info"></p>
+        </div>
         <p id="live-session-info" class="info">Laddar…</p>
         <p id="live-status" class="status"></p>
         <p id="live-updated" class="info"></p>
       </section>
 
-      <section class="section-block">
-        <h2>Bana</h2>
-        <p class="info">Positioner på banan uppdateras under pågående session (OpenF1 location-data).</p>
-        <div class="live-track-wrap">
-          <canvas id="live-track" width="900" height="420" aria-label="Live banpositioner"></canvas>
-        </div>
-      </section>
+      <nav class="live-tab-nav tab-nav" aria-label="Pit Wall-vyer">
+        <button type="button" class="tab-btn active" data-tab="overview">Översikt</button>
+        <button type="button" class="tab-btn" data-tab="intervals">Intervall</button>
+        <button type="button" class="tab-btn" data-tab="stints">Däck</button>
+        <button type="button" class="tab-btn" data-tab="pits">Pit</button>
+        <button type="button" class="tab-btn" data-tab="laps">Varv</button>
+        <button type="button" class="tab-btn" data-tab="race-control">Race control</button>
+        <button type="button" class="tab-btn" data-tab="overtakes">Omkörningar</button>
+        <button type="button" class="tab-btn" data-tab="weather">Väder</button>
+        <button type="button" class="tab-btn" data-tab="telemetry">Telemetri</button>
+        <button type="button" class="tab-btn" data-tab="grid-result">Grid & resultat</button>
+      </nav>
 
-      <section class="section-block">
-        <h2>Ställning</h2>
-        <div class="table-scroll">
-          <table id="live-positions-table">
-            <thead>
-              <tr>
-                <th>Pos</th>
-                <th>#</th>
-                <th>Förare</th>
-                <th>Team</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
+      <div id="tab-overview" class="live-tab-panel active">
+        <section class="section-block">
+          <h2>Bana</h2>
+          <p class="info">Positioner på banan (OpenF1 location). Under replay visas historisk position vid vald tidpunkt.</p>
+          <div class="live-track-wrap">
+            <canvas id="live-track" width="900" height="420" aria-label="Pit Wall banpositioner"></canvas>
+          </div>
+        </section>
+
+        <section class="section-block">
+          <h2>Ställning</h2>
+          <div class="table-scroll">
+            <table id="live-positions-table">
+              <thead>
+                <tr>
+                  <th>Pos</th>
+                  <th>#</th>
+                  <th>Förare</th>
+                  <th>Team</th>
+                  <th>Gap</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-intervals" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Intervall & gaps</h2>
+          <p class="info">Senaste gap till ledare och bilen framför (OpenF1 intervals).</p>
+          <div class="table-scroll">
+            <table id="live-intervals-table">
+              <thead>
+                <tr>
+                  <th>Pos</th>
+                  <th>Förare</th>
+                  <th>Till ledare</th>
+                  <th>Till bil framför</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-stints" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Aktuella stints & däck</h2>
+          <div class="table-scroll">
+            <table id="live-stints-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Förare</th>
+                  <th>Stint</th>
+                  <th>Compound</th>
+                  <th>Varv</th>
+                  <th>Start</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-pits" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Pit stops</h2>
+          <div class="table-scroll">
+            <table id="live-pits-table">
+              <thead>
+                <tr>
+                  <th>Förare</th>
+                  <th>Varv</th>
+                  <th>Stopptid</th>
+                  <th>Tid</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-laps" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Snabbaste varv</h2>
+          <div class="table-scroll">
+            <table id="live-fastest-laps-table">
+              <thead>
+                <tr>
+                  <th>Förare</th>
+                  <th>Varv</th>
+                  <th>Tid</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="section-block">
+          <h2>Senaste varv</h2>
+          <div class="table-scroll">
+            <table id="live-recent-laps-table">
+              <thead>
+                <tr>
+                  <th>Förare</th>
+                  <th>Varv</th>
+                  <th>Tid</th>
+                  <th>S1</th>
+                  <th>S2</th>
+                  <th>S3</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-race-control" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Race control</h2>
+          <ul id="live-race-control-list" class="live-feed-list"></ul>
+        </section>
+      </div>
+
+      <div id="tab-overtakes" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Omkörningar</h2>
+          <div class="table-scroll">
+            <table id="live-overtakes-table">
+              <thead>
+                <tr>
+                  <th>Varv</th>
+                  <th>Omkörare</th>
+                  <th>Omkörd</th>
+                  <th>Position</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-weather" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Väder</h2>
+          <div id="live-weather" class="live-weather-grid"></div>
+        </section>
+      </div>
+
+      <div id="tab-telemetry" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Telemetri (senaste sample)</h2>
+          <p class="info">Gas, broms, DRS, växel och hastighet – live eller vid replay-tidpunkt.</p>
+          <div class="table-scroll">
+            <table id="live-telemetry-table">
+              <thead>
+                <tr>
+                  <th>Förare</th>
+                  <th>km/h</th>
+                  <th>Växel</th>
+                  <th>Gas</th>
+                  <th>Broms</th>
+                  <th>DRS</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-grid-result" class="live-tab-panel">
+        <section class="section-block">
+          <h2>Startgrid</h2>
+          <div class="table-scroll">
+            <table id="live-grid-table">
+              <thead>
+                <tr>
+                  <th>Pos</th>
+                  <th>Förare</th>
+                  <th>Team</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="section-block">
+          <h2>Sessionresultat</h2>
+          <div class="table-scroll">
+            <table id="live-result-table">
+              <thead>
+                <tr>
+                  <th>Pos</th>
+                  <th>Förare</th>
+                  <th>Team</th>
+                  <th>Poäng</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </main>
+
+    <div id="team-radio-toast-host" class="team-radio-toast-host" aria-live="polite"></div>
+
+    <button
+      type="button"
+      id="team-radio-open-btn"
+      class="team-radio-fab"
+      aria-label="Öppna team radio"
+      aria-haspopup="dialog"
+      aria-controls="team-radio-modal"
+    >
+      <span class="team-radio-fab-icon" aria-hidden="true">📻</span>
+      <span class="team-radio-fab-label">Team radio</span>
+      <span id="team-radio-badge" class="team-radio-badge hidden" aria-hidden="true"></span>
+    </button>
+
+    <div
+      id="team-radio-modal"
+      class="team-radio-modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="team-radio-modal-title"
+      hidden
+    >
+      <div class="team-radio-modal-backdrop" data-dismiss="team-radio" tabindex="-1"></div>
+      <div class="team-radio-modal-sheet">
+        <header class="team-radio-modal-header">
+          <h2 id="team-radio-modal-title">Team radio</h2>
+          <button type="button" id="team-radio-close-btn" class="team-radio-modal-close" aria-label="Stäng">✕</button>
+        </header>
+        <div class="team-radio-modal-body">
+          <p class="info team-radio-modal-hint">Meddelanden från förare och team under sessionen. Fungerar i live och replay.</p>
+          <ul id="live-radio-list" class="live-feed-list"></ul>
+        </div>
+      </div>
+    </div>
 
     <footer class="site-footer">
       <div class="footer-inner">
@@ -87,7 +355,7 @@
           <a href="/index.html">Spel</a>
           <a href="/settlement.html">Rättning</a>
           <a href="/dashboard.html">Dashboard</a>
-          <a href="/live.html">Live</a>
+          <a href="/live.html">Pit Wall</a>
           <a href="/app-installation.html">App</a>
         </nav>
         <div class="footer-brand-row">
@@ -100,7 +368,7 @@
             <span class="footer-social-icon" title="X">𝕏</span>
             <span class="footer-social-icon" title="Instagram">◎</span>
           </div>
-          <p class="footer-copy">© 2026 F1tting. Ej anslutet till Formula One World Championship.</p>
+          <p class="footer-copy">© 2026 F1tting. Ej anslutet till Formula One World Championship. Data via OpenF1.</p>
         </div>
       </div>
     </footer>
