@@ -55,9 +55,13 @@ let meetingsInFlight = null;
 let driversInFlight = null;
 let cachedRaceStandings = null;
 let cachedRaceStandingsAt = 0;
+let cachedLiveBundle = null;
+let cachedLiveBundleAt = 0;
+let cachedLiveSessionKey = null;
 
 const STANDINGS_TTL_MS = 15 * 60 * 1000;
 const RACE_STANDINGS_TTL_MS = 10 * 60 * 1000;
+const LIVE_CACHE_TTL_MS = 3000;
 const OPENF1_MIN_INTERVAL_MS = 400;
 
 let openF1Queue = Promise.resolve();
@@ -432,6 +436,120 @@ function writeBetsFile(data) {
   fs.writeFileSync(betsFile, JSON.stringify(data, null, 2), "utf-8");
 }
 
+function resolveSessionKeyParam(raw) {
+  if (raw === undefined || raw === null || raw === "" || raw === "latest") {
+    return "latest";
+  }
+  return String(raw);
+}
+
+async function fetchOpenF1Json(path) {
+  const res = await openF1Fetch(`https://api.openf1.org/v1${path}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+function deriveSessionStatus(session) {
+  if (!session) return "unknown";
+  if (session.is_cancelled) return "cancelled";
+  const start = new Date(session.date_start || session.session_start_utc || 0);
+  const end = new Date(
+    session.date_end ||
+      session.session_end_utc ||
+      start.getTime() + 2 * 60 * 60 * 1000
+  );
+  const now = new Date();
+  if (now < start) return "upcoming";
+  if (now <= end) return "live";
+  return "finished";
+}
+
+function latestPerDriver(rows, key = "driver_number") {
+  const map = new Map();
+  rows.forEach((row) => {
+    const driverNumber = row[key];
+    if (driverNumber === undefined || driverNumber === null) return;
+    const existing = map.get(driverNumber);
+    const rowDate = new Date(row.date || 0).getTime();
+    if (!existing || rowDate >= new Date(existing.date || 0).getTime()) {
+      map.set(driverNumber, row);
+    }
+  });
+  return Array.from(map.values());
+}
+
+async function loadLiveSession(sessionKey) {
+  const sessions = await fetchOpenF1Json(
+    `/sessions?session_key=${encodeURIComponent(sessionKey)}`
+  );
+  const session = sessions[0] || null;
+  return { session, status: deriveSessionStatus(session) };
+}
+
+async function loadLivePositions(sessionKey) {
+  const rows = await fetchOpenF1Json(
+    `/position?session_key=${encodeURIComponent(sessionKey)}`
+  );
+  return latestPerDriver(rows)
+    .slice()
+    .sort((a, b) => Number(a.position) - Number(b.position));
+}
+
+async function loadLiveLocations(sessionKey, sessionStatus) {
+  if (sessionStatus !== "live") return [];
+  const since = new Date(Date.now() - 15000).toISOString();
+  const rows = await fetchOpenF1Json(
+    `/location?session_key=${encodeURIComponent(sessionKey)}&date>${encodeURIComponent(since)}`
+  );
+  return latestPerDriver(rows);
+}
+
+async function loadLiveBundle(sessionKey = "latest") {
+  const now = Date.now();
+  if (
+    cachedLiveBundle &&
+    cachedLiveSessionKey === sessionKey &&
+    now - cachedLiveBundleAt < LIVE_CACHE_TTL_MS
+  ) {
+    return cachedLiveBundle;
+  }
+
+  const { session, status } = await loadLiveSession(sessionKey);
+  const effectiveKey = session?.session_key || sessionKey;
+  const [positions, locations, drivers] = await Promise.all([
+    loadLivePositions(effectiveKey),
+    loadLiveLocations(effectiveKey, status),
+    fetchOpenF1Json(`/drivers?session_key=${encodeURIComponent(effectiveKey)}`)
+  ]);
+
+  const driverByNumber = new Map(drivers.map((d) => [d.driver_number, d]));
+  const bundle = {
+    updatedAt: new Date().toISOString(),
+    sessionKey: effectiveKey,
+    session,
+    status,
+    positions: positions.map((p) => ({
+      driver_number: p.driver_number,
+      position: p.position,
+      date: p.date,
+      driver: driverByNumber.get(p.driver_number) || null
+    })),
+    locations: locations.map((l) => ({
+      driver_number: l.driver_number,
+      x: l.x,
+      y: l.y,
+      z: l.z,
+      date: l.date
+    })),
+    trackMapAvailable: status === "live" && locations.length > 0
+  };
+
+  cachedLiveBundle = bundle;
+  cachedLiveBundleAt = now;
+  cachedLiveSessionKey = sessionKey;
+  return bundle;
+}
+
 app.get("/api/metadata", async (req, res) => {
   try {
     const db = readBetsFile();
@@ -776,6 +894,78 @@ app.post("/api/bets/race/:sessionKey/:userId", (req, res) => {
 
   writeBetsFile(db);
   res.json(bet);
+});
+
+app.get("/api/live", async (req, res) => {
+  try {
+    const sessionKey = resolveSessionKeyParam(req.query.session_key);
+    const bundle = await loadLiveBundle(sessionKey);
+    res.json(bundle);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load live data" });
+  }
+});
+
+app.get("/api/live/session", async (req, res) => {
+  try {
+    const sessionKey = resolveSessionKeyParam(req.query.session_key);
+    const { session, status } = await loadLiveSession(sessionKey);
+    res.json({
+      sessionKey: session?.session_key || sessionKey,
+      session,
+      status,
+      updatedAt: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load live session" });
+  }
+});
+
+app.get("/api/live/positions", async (req, res) => {
+  try {
+    const sessionKey = resolveSessionKeyParam(req.query.session_key);
+    const { session } = await loadLiveSession(sessionKey);
+    const effectiveKey = session?.session_key || sessionKey;
+    const positions = await loadLivePositions(effectiveKey);
+    const drivers = await fetchOpenF1Json(
+      `/drivers?session_key=${encodeURIComponent(effectiveKey)}`
+    );
+    const driverByNumber = new Map(drivers.map((d) => [d.driver_number, d]));
+    res.json({
+      sessionKey: effectiveKey,
+      updatedAt: new Date().toISOString(),
+      positions: positions.map((p) => ({
+        driver_number: p.driver_number,
+        position: p.position,
+        date: p.date,
+        driver: driverByNumber.get(p.driver_number) || null
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load live positions" });
+  }
+});
+
+app.get("/api/live/locations", async (req, res) => {
+  try {
+    const sessionKey = resolveSessionKeyParam(req.query.session_key);
+    const { session, status } = await loadLiveSession(sessionKey);
+    const effectiveKey = session?.session_key || sessionKey;
+    const locations = await loadLiveLocations(effectiveKey, status);
+    res.json({
+      sessionKey: effectiveKey,
+      status,
+      updatedAt: new Date().toISOString(),
+      trackMapAvailable: status === "live" && locations.length > 0,
+      locations
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load live locations" });
+  }
 });
 
 app.listen(PORT, () => {
