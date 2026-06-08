@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <title>F1 Betting 2026 – Admin</title>
+    <title>F1 Betting 2026 – Live</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -31,7 +31,7 @@
             <a href="/index.html" class="nav-link">Spel</a>
             <a href="/settlement.html" class="nav-link">Rättning</a>
             <a href="/dashboard.html" class="nav-link">Dashboard</a>
-            <a href="/live.html" class="nav-link">Live</a>
+            <a href="/live.html" class="nav-link active">Live</a>
             <a href="/app-installation.html" class="nav-link">App</a>
           </nav>
         </div>
@@ -43,93 +43,36 @@
     </header>
 
     <main>
-      <h1 class="page-title">Admin</h1>
-      <section id="admin-user-section">
-        <h2>Hantera bettare</h2>
-
-        <div class="section-block">
-          <h3>Lägg till ny bettare</h3>
-          <div class="user-manage-row">
-            <input
-              id="admin-new-user-name"
-              type="text"
-              placeholder="Namn på ny bettare"
-            />
-            <button id="admin-add-user-btn">Lägg till</button>
-          </div>
-        </div>
-
-        <div class="section-block">
-          <h3>Ta bort befintlig bettare</h3>
-          <label for="admin-user-select">Välj bettare:</label>
-          <select id="admin-user-select">
-            <option value="">-- Välj --</option>
-          </select>
-          <button id="admin-delete-user-btn">Ta bort</button>
-        </div>
-
-        <div class="section-block">
-          <h3>Årsbett – tillfällig öppning</h3>
-          <p class="info">
-            Använd detta om säsongen redan har startat men någon ändå behöver
-            lägga sitt årsbett.
-          </p>
-          <div class="user-manage-row">
-            <button id="admin-season-override-btn" type="button"></button>
-            <span id="admin-season-override-status" class="status"></span>
-          </div>
-          <p id="admin-season-override-state" class="info"></p>
-        </div>
-
-        <p id="admin-user-status" class="status"></p>
+      <h1 class="page-title">Live</h1>
+      <section class="section-block">
+        <h2>Session</h2>
+        <p id="live-session-info" class="info">Laddar…</p>
+        <p id="live-status" class="status"></p>
+        <p id="live-updated" class="info"></p>
       </section>
 
       <section class="section-block">
-        <h2>Rättning</h2>
-        <p class="info">Öppna rättning av racebet här:</p>
-        <a href="/settlement.html">Rättning racebet</a>
+        <h2>Bana</h2>
+        <p class="info">Positioner på banan uppdateras under pågående session (OpenF1 location-data).</p>
+        <div class="live-track-wrap">
+          <canvas id="live-track" width="900" height="420" aria-label="Live banpositioner"></canvas>
+        </div>
       </section>
 
-      <section id="admin-summary-section">
-        <h2>Sammanställning av bets</h2>
-
-        <p class="info">
-          Välj vilken användare som sammanställningen ska visas som (för att
-          respektera regeln att man inte ser andras racebett innan racet har
-          startat).
-        </p>
-
-        <div class="section-block">
-          <label for="admin-viewer-select">Visa som användare:</label>
-          <select id="admin-viewer-select">
-            <option value="">-- Välj --</option>
-          </select>
-          <button id="admin-load-summary-btn">Ladda sammanställning</button>
-          <span id="admin-summary-status" class="status"></span>
-        </div>
-
-        <div class="section-block">
-          <h3>Välj race för detaljerad sammanställning</h3>
-          <label for="admin-race-select">Race:</label>
-          <select id="admin-race-select">
-            <option value="">-- Välj race --</option>
-          </select>
-          <button id="admin-show-race-btn">Visa race-sammanställning</button>
-        </div>
-
-        <div class="section-block">
-          <h3>Årsbett per användare</h3>
-          <div id="admin-summary-season"></div>
-        </div>
-
-        <div class="section-block">
-          <h3>Racebett per race och användare</h3>
-          <div id="admin-summary-races"></div>
-        </div>
-
-        <div class="section-block">
-          <h3>Valt race – detaljerad sammanställning</h3>
-          <div id="admin-summary-race-single"></div>
+      <section class="section-block">
+        <h2>Ställning</h2>
+        <div class="table-scroll">
+          <table id="live-positions-table">
+            <thead>
+              <tr>
+                <th>Pos</th>
+                <th>#</th>
+                <th>Förare</th>
+                <th>Team</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </section>
     </main>
@@ -162,7 +105,6 @@
       </div>
     </footer>
 
-    <script src="admin.js"></script>
+    <script src="live.js"></script>
   </body>
 </html>
-
