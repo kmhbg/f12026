@@ -13,19 +13,37 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
-      <div class="header-row">
-        <h1>F1 Betting 2026 – Rättning racebet</h1>
-        <nav class="header-nav">
-          <a href="/index.html">Spel</a>
-          <a href="/settlement.html" class="active">Rättning</a>
-          <a href="/dashboard.html">Dashboard</a>
-          <a href="/app-installation.html">App</a>
-        </nav>
+    <header class="site-header">
+      <div class="header-top">
+        <div class="header-top-inner">
+          <span class="header-tag">Säsong 2026 · Formel 1 betting</span>
+          <div class="header-top-actions">
+            <a href="/app-installation.html" class="header-cta-pill">Ladda ner app</a>
+          </div>
+        </div>
+      </div>
+      <div class="header-main">
+        <div class="header-main-inner">
+          <a href="/index.html" class="site-logo" aria-label="F1tting startsida">
+            <span class="logo-mark"><span class="logo-f1">F1</span><span class="logo-rest">tting</span></span>
+          </a>
+          <nav class="header-nav" aria-label="Huvudnavigation">
+            <a href="/index.html" class="nav-link">Spel</a>
+            <a href="/settlement.html" class="nav-link active">Rättning</a>
+            <a href="/dashboard.html" class="nav-link">Dashboard</a>
+            <a href="/live.html" class="nav-link">Live</a>
+            <a href="/app-installation.html" class="nav-link">App</a>
+          </nav>
+        </div>
+      </div>
+      <div class="header-speed-lines" aria-hidden="true">
+        <span class="speed-line-logo"></span>
+        <span class="speed-line-track"></span>
       </div>
     </header>
 
     <main>
+      <h1 class="page-title">Rättning</h1>
       <section>
         <h2>Välj race</h2>
         <div class="section-block">
@@ -74,6 +92,34 @@
         <p class="info">Samlad pott: <span id="settlement-pot">-</span></p>
       </section>
     </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <div class="footer-download">
+          <p class="footer-download-title">Ladda ner F1tting-appen</p>
+          <a href="/app-installation.html" class="footer-download-btn">Installationsguide →</a>
+        </div>
+        <nav class="footer-nav" aria-label="Sidfotsnavigation">
+          <a href="/index.html">Spel</a>
+          <a href="/settlement.html">Rättning</a>
+          <a href="/dashboard.html">Dashboard</a>
+          <a href="/live.html">Live</a>
+          <a href="/app-installation.html">App</a>
+        </nav>
+        <div class="footer-brand-row">
+          <span class="footer-logo-mark"><span class="logo-f1">F1</span><span class="logo-rest">tting</span></span>
+          <span class="footer-speed-lines" aria-hidden="true"></span>
+        </div>
+        <div class="footer-bottom">
+          <div class="footer-social" aria-label="Sociala medier (platshållare)">
+            <span class="footer-social-icon" title="Facebook">f</span>
+            <span class="footer-social-icon" title="X">𝕏</span>
+            <span class="footer-social-icon" title="Instagram">◎</span>
+          </div>
+          <p class="footer-copy">© 2026 F1tting. Ej anslutet till Formula One World Championship.</p>
+        </div>
+      </div>
+    </footer>
 
     <script src="settlement.js"></script>
   </body>
