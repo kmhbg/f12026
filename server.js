@@ -1141,32 +1141,55 @@ function ensureSessionCacheBuilding(sessionKey, sessionHint = null) {
   });
 }
 
-async function listLatestFinishedRaces(limit = CACHE_PREWARM_RACE_COUNT) {
+function isPrewarmableSession(session, racesOnly) {
+  if (!session || session.is_cancelled) return false;
+  if (Number(session.year) !== SEASON_YEAR) return false;
+  if (deriveSessionStatus(session) !== "finished") return false;
+  const name = session.session_name || session.session_type || "";
+  if (racesOnly) return name === "Race";
+  if (name === "Race" || name === "Qualifying" || name === "Sprint Qualifying" || name === "Sprint") {
+    return true;
+  }
+  return /^Practice\s*[123]?$/i.test(name) || name === "Practice" || name.startsWith("Practice");
+}
+
+async function listFinishedSessionsForPrewarm(options = {}) {
+  const racesOnly = options.racesOnly !== false;
+  const limit = options.limit;
   const sessions = await loadAllSessions();
-  return sessions
-    .filter((session) => {
-      if (session.is_cancelled) return false;
-      if (Number(session.year) !== SEASON_YEAR) return false;
-      const name = session.session_name || session.session_type || "";
-      if (name !== "Race") return false;
-      return deriveSessionStatus(session) === "finished";
-    })
+  let filtered = sessions
+    .filter((session) => isPrewarmableSession(session, racesOnly))
     .sort((a, b) => {
       const da = new Date(a.date_start || a.session_start_utc || 0).getTime();
       const db = new Date(b.date_start || b.session_start_utc || 0).getTime();
       return db - da;
-    })
-    .slice(0, Math.max(0, limit));
+    });
+  if (limit != null && Number.isFinite(limit) && limit > 0) {
+    filtered = filtered.slice(0, limit);
+  }
+  return filtered;
 }
 
-async function prewarmRaceCaches(options = {}) {
+async function listLatestFinishedRaces(limit = CACHE_PREWARM_RACE_COUNT) {
+  return listFinishedSessionsForPrewarm({ racesOnly: true, limit });
+}
+
+async function prewarmSessionCaches(options = {}) {
   const startedAt = new Date().toISOString();
-  const limit = options.limit ?? CACHE_PREWARM_RACE_COUNT;
+  const racesOnly = options.racesOnly !== false;
+  const explicitLimit =
+    options.limit != null && Number.isFinite(Number(options.limit)) && Number(options.limit) > 0
+      ? Number(options.limit)
+      : null;
+  const unlimited = (options.all === true || options.unlimited === true) && !explicitLimit;
+  const limit = explicitLimit ?? (unlimited ? null : options.limit ?? CACHE_PREWARM_RACE_COUNT);
   const result = {
     startedAt,
     finishedAt: null,
     manual: !!options.manual,
-    prewarmRaceCount: limit,
+    all: unlimited,
+    racesOnly,
+    prewarmLimit: limit,
     cacheDir: cacheRoot,
     cached: [],
     skipped: [],
@@ -1174,9 +1197,9 @@ async function prewarmRaceCaches(options = {}) {
     totalCandidates: 0
   };
 
-  let races;
+  let sessions;
   try {
-    races = await listLatestFinishedRaces(limit);
+    sessions = await listFinishedSessionsForPrewarm({ racesOnly, limit });
   } catch (err) {
     result.finishedAt = new Date().toISOString();
     result.error = err.message;
@@ -1184,11 +1207,11 @@ async function prewarmRaceCaches(options = {}) {
     throw err;
   }
 
-  result.totalCandidates = races.length;
+  result.totalCandidates = sessions.length;
 
-  for (const session of races) {
+  for (const session of sessions) {
     const key = String(session.session_key);
-    const label = `${session.session_name || session.session_type || "Race"} (${session.date_start || "?"})`;
+    const label = `${session.session_name || session.session_type || "Session"} (${session.date_start || "?"})`;
 
     if (isSessionCacheComplete(key)) {
       result.skipped.push({ sessionKey: Number(key) || key, reason: "complete", label });
@@ -1196,12 +1219,12 @@ async function prewarmRaceCaches(options = {}) {
     }
 
     try {
-      console.log(`[cache-prewarm] Bygger cache för race ${key} – ${label}`);
+      console.log(`[cache-prewarm] Bygger cache för session ${key} – ${label}`);
       await buildSessionCache(key, session);
       result.cached.push({ sessionKey: Number(key) || key, label });
-      console.log(`[cache-prewarm] Klar: race ${key}`);
+      console.log(`[cache-prewarm] Klar: session ${key}`);
     } catch (err) {
-      console.error(`[cache-prewarm] Misslyckades race ${key}:`, err.message);
+      console.error(`[cache-prewarm] Misslyckades session ${key}:`, err.message);
       result.failed.push({ sessionKey: Number(key) || key, label, error: err.message });
     }
   }
@@ -1212,6 +1235,10 @@ async function prewarmRaceCaches(options = {}) {
     `[cache-prewarm] Klar – cachade: ${result.cached.length}, hoppade: ${result.skipped.length}, fel: ${result.failed.length}`
   );
   return result;
+}
+
+async function prewarmRaceCaches(options = {}) {
+  return prewarmSessionCaches({ ...options, racesOnly: true });
 }
 
 async function listFinishedSessionsForCacheSync() {
@@ -1230,7 +1257,21 @@ async function listFinishedSessionsForCacheSync() {
 }
 
 async function syncSessionCaches(options = {}) {
-  const prewarmResult = await prewarmRaceCaches(options);
+  const unlimited = options.all === true || options.unlimited === true;
+
+  if (unlimited || options.racesOnly === false) {
+    return prewarmSessionCaches({
+      ...options,
+      all: unlimited,
+      unlimited
+    });
+  }
+
+  const prewarmResult = await prewarmSessionCaches({
+    ...options,
+    racesOnly: true,
+    limit: options.limit ?? CACHE_PREWARM_RACE_COUNT
+  });
 
   if (CACHE_SYNC_MAX_SESSIONS <= CACHE_PREWARM_RACE_COUNT) {
     return prewarmResult;
@@ -2724,7 +2765,18 @@ app.post("/api/live/replay/cache/sync", async (req, res) => {
         last: lastCacheSyncResult
       });
     }
-    cacheSyncInFlight = syncSessionCaches({ manual: true }).finally(() => {
+    const query = { ...req.query, ...(req.body || {}) };
+    const all = query.all === "1" || query.all === true || query.all === "true";
+    const racesOnly = !(query.races_only === "0" || query.racesOnly === false || query.races_only === false);
+    const limitRaw = query.limit;
+    const limit = limitRaw != null && limitRaw !== "" ? Number(limitRaw) : undefined;
+    const syncOptions = {
+      manual: true,
+      all: all || query.unlimited === "1" || query.unlimited === true,
+      racesOnly,
+      limit: Number.isFinite(limit) && limit > 0 ? limit : undefined
+    };
+    cacheSyncInFlight = syncSessionCaches(syncOptions).finally(() => {
       cacheSyncInFlight = null;
     });
     const result = await cacheSyncInFlight;

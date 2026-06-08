@@ -1,0 +1,16 @@
+[Unit]
+Description=F1 Betting – prewarm OpenF1 replay cache
+After=network.target f1-betting.service
+Requires=f1-betting.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/f1-betting-2026
+Environment=PREWARM_RACES_ONLY=1
+ExecStart=/bin/bash /var/www/f1-betting-2026/deploy/prewarm-cache.sh
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

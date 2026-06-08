@@ -37,6 +37,7 @@ fi
 
 # Persistent replay-cache (OpenF1) – skrivs av www-data via systemd
 mkdir -p data/cache/sessions
+# Efter racehelg: bash deploy/prewarm-cache.sh (eller PREWARM_ALL=1 för hel säsong)
 if command -v chown &>/dev/null && id www-data &>/dev/null; then
   chown -R www-data:www-data data/cache 2>/dev/null || sudo chown -R www-data:www-data data/cache || true
 fi
