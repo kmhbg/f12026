@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-    <title>F1 Betting 2026 – Årsbett Dashboard</title>
+    <title>F1 Betting 2026 – Dashboard</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -31,7 +31,7 @@
             <a href="/index.html" class="nav-link">Spel</a>
             <a href="/settlement.html" class="nav-link">Rättning</a>
             <a href="/dashboard.html" class="nav-link active">Dashboard</a>
-            <a href="/live.html" class="nav-link">Live</a>
+            <a href="/live.html" class="nav-link">Pit Wall</a>
             <a href="/app-installation.html" class="nav-link">App</a>
           </nav>
         </div>
@@ -44,13 +44,6 @@
 
     <main>
       <h1 class="page-title">Dashboard</h1>
-      <section class="section-block">
-        <h2>Sammanställning mot tabellen</h2>
-        <p class="info">
-          Visar nuvarande ställning jämfört med respektive användares årsbett.
-        </p>
-        <p id="dashboard-updated" class="info"></p>
-      </section>
 
       <section class="section-block">
         <h2>Racebet – tabell</h2>
@@ -72,7 +65,45 @@
         <p id="race-updated" class="info"></p>
       </section>
 
-      <section id="dashboard-container" class="dashboard-grid"></section>
+      <section class="section-block season-analytics">
+        <h2>Årsbett – statistik</h2>
+        <p class="info">
+          Jämför säsongsbett mot aktuell tabell. Lägre diff = bättre gissning.
+        </p>
+        <p id="dashboard-updated" class="info"></p>
+
+        <div id="season-kpis" class="stats-kpi-row" aria-label="Nyckeltal årsbett"></div>
+
+        <h3 class="subsection-title">Ranking årsbett</h3>
+        <p class="info">Sorterat efter total absolut diff (förare + stall).</p>
+        <div class="table-scroll">
+          <table id="season-accuracy-table" class="analytics-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Spelare</th>
+                <th>Förare diff</th>
+                <th>Stall diff</th>
+                <th>Total diff</th>
+                <th>Träffar (±0)</th>
+                <th>Nära (±1)</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h3 class="subsection-title">Detaljanalys</h3>
+        <div class="analytics-toolbar">
+          <div class="mode-tabs" role="tablist" aria-label="Analysläge">
+            <button type="button" class="mode-tab active" data-mode="single" role="tab" aria-selected="true">Enskild</button>
+            <button type="button" class="mode-tab" data-mode="compare" role="tab" aria-selected="false">Jämför</button>
+            <button type="button" class="mode-tab" data-mode="group" role="tab" aria-selected="false">Grupp</button>
+          </div>
+          <div id="user-picker" class="user-picker"></div>
+        </div>
+        <div id="analytics-content" class="analytics-content"></div>
+      </section>
     </main>
 
     <footer class="site-footer">
@@ -85,7 +116,7 @@
           <a href="/index.html">Spel</a>
           <a href="/settlement.html">Rättning</a>
           <a href="/dashboard.html">Dashboard</a>
-          <a href="/live.html">Live</a>
+          <a href="/live.html">Pit Wall</a>
           <a href="/app-installation.html">App</a>
         </nav>
         <div class="footer-brand-row">

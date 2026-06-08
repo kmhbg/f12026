@@ -1,4 +1,6 @@
 data/bets.json
+data/cache/*
+!data/cache/.gitkeep
 public/downloads/*.apk
 public/downloads/*.ipa
 node_modules/

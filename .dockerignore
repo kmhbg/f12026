@@ -1,4 +1,8 @@
 node_modules
+data/cache/*
+!data/cache/sessions/
+!data/cache/sessions/**
+!data/cache/.gitkeep
 .git
 .github
 .azure
