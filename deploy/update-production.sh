@@ -16,19 +16,22 @@ SERVICE_NAME="${SERVICE_NAME:-f1-betting}"
 
 cd "$APP_DIR"
 
+BACKUP_FILE="$APP_DIR/data/.bets.json.backup"
+mkdir -p data
+
 if [ -f data/bets.json ]; then
-  cp data/bets.json "/tmp/bets.json.backup.$(date +%Y%m%d%H%M%S)"
-  cp data/bets.json /tmp/bets.json.backup
-  echo "Backup: /tmp/bets.json.backup"
+  cp data/bets.json "$BACKUP_FILE"
+  cp data/bets.json "data/.bets.json.backup.$(date +%Y%m%d%H%M%S)"
+  echo "Backup: $BACKUP_FILE"
 fi
 
 git fetch origin
 git checkout main
-git pull --ff-only origin main
+# Rensa lokala ändringar (t.ex. node_modules) så pull/reset inte blockeras
+git reset --hard origin/main
 
-if [ -f /tmp/bets.json.backup ]; then
-  mkdir -p data
-  cp /tmp/bets.json.backup data/bets.json
+if [ -f "$BACKUP_FILE" ]; then
+  cp "$BACKUP_FILE" data/bets.json
   echo "Återställde data/bets.json från backup"
 fi
 
