@@ -1,0 +1,13 @@
+# F1 Betting 2026 – exempel för betsel.fortiddns.com
+# Kopiera in detta block i /etc/caddy/Caddyfile (eller kör deploy.sh som lägger in det).
+# Caddy skickar alla anrop till Node-appen på port 3000.
+
+# Med domän – Caddy aktiverar HTTPS automatiskt om port 80 är öppen
+betsel.fortiddns.com {
+	reverse_proxy localhost:3000
+}
+
+# Om du bara vill ha HTTP (inga certifikat), använd:
+# http://betsel.fortiddns.com {
+# 	reverse_proxy localhost:3000
+# }
