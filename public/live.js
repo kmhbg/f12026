@@ -723,6 +723,7 @@ function playTeamRadioRow(row) {
   ) {
     state.teamRadioAudio.pause();
     updateTeamRadioPlayingUi();
+    ensureReplayAnimationRunning();
     return;
   }
 
@@ -737,13 +738,20 @@ function playTeamRadioRow(row) {
     console.error("[team-radio] playback error:", audio.error?.code, audio.error?.message, src);
     if (state.teamRadioCurrentId === id) stopTeamRadioPlayback();
   });
-  audio.addEventListener("pause", updateTeamRadioPlayingUi);
-  audio.addEventListener("play", updateTeamRadioPlayingUi);
+  audio.addEventListener("pause", () => {
+    updateTeamRadioPlayingUi();
+    ensureReplayAnimationRunning();
+  });
+  audio.addEventListener("play", () => {
+    updateTeamRadioPlayingUi();
+    ensureReplayAnimationRunning();
+  });
   audio.play().catch((err) => {
     console.error("[team-radio] play() rejected:", err?.message, src);
     if (state.teamRadioCurrentId === id) stopTeamRadioPlayback();
   });
   updateTeamRadioPlayingUi();
+  ensureReplayAnimationRunning();
 }
 
 function teamRadioIndexAtOrBefore(atMs) {
@@ -1146,6 +1154,17 @@ function stopReplayAnimation() {
     state.replay.animRafId = null;
   }
   state.replay.lastAnimTime = null;
+}
+
+function isTeamRadioPlaying() {
+  return Boolean(state.teamRadioAudio && !state.teamRadioAudio.paused);
+}
+
+function ensureReplayAnimationRunning() {
+  if (!state.replay.active || !state.replay.playing || state.replay.atMs == null) return;
+  if (state.replay.animRafId != null) return;
+  state.replay.lastAnimTime = null;
+  state.replay.animRafId = requestAnimationFrame(replayAnimationStep);
 }
 
 function stopReplayPlayback() {
@@ -2072,7 +2091,7 @@ function setupReplayControls() {
   });
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && state.replay.playing) {
+    if (document.hidden && state.replay.playing && !isTeamRadioPlaying()) {
       stopReplayPlayback();
     }
   });
