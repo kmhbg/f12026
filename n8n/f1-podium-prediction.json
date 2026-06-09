@@ -1,0 +1,134 @@
+{
+  "name": "F1 Podium Prediction (OpenF1)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 6,0"
+            }
+          ]
+        }
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567002",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 480]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "f1-podium-prediction",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567003",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 660],
+      "webhookId": "f1-podium-prediction"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const BASE = 'https://api.openf1.org/v1';\nconst SEASON = 2026;\nconst WEIGHTS = { qual: 50, fp3: 15, fp2: 10, fp1: 5 };\nconst PRACTICE_ONLY_SCALE = (WEIGHTS.qual + WEIGHTS.fp3 + WEIGHTS.fp2 + WEIGHTS.fp1) / (WEIGHTS.fp3 + WEIGHTS.fp2 + WEIGHTS.fp1);\nconst sleep = (ms) => new Promise((r) => setTimeout(r, ms));\n\nasync function fetchJson(path) {\n  await sleep(350);\n  return await $helpers.httpRequest({ method: 'GET', url: `${BASE}${path}`, json: true });\n}\n\nfunction sessionByName(sessions, meetingKey, name) {\n  return sessions.find((s) => s.meeting_key === meetingKey && s.session_name === name && !s.is_cancelled);\n}\n\nfunction pickTargetRace(sessions, now = new Date()) {\n  const races = sessions\n    .filter((s) => s.session_name === 'Race' && s.year === SEASON && !s.is_cancelled)\n    .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));\n  const qualifying = sessions.filter((s) => s.session_name === 'Qualifying' && s.year === SEASON && !s.is_cancelled);\n\n  const upcoming = races.filter((r) => new Date(r.date_start) > now);\n  if (upcoming.length) return { race: upcoming[0], reason: 'nästa kommande race' };\n\n  const inProgress = races\n    .filter((r) => {\n      const qual = qualifying.find((q) => q.meeting_key === r.meeting_key);\n      return qual && new Date(qual.date_end) <= now && new Date(r.date_start) > now;\n    })\n    .sort((a, b) => new Date(b.date_start) - new Date(a.date_start));\n  if (inProgress.length) return { race: inProgress[0], reason: 'qual klar, race ej startat' };\n\n  const completed = races\n    .filter((r) => new Date(r.date_end) <= now)\n    .sort((a, b) => new Date(b.date_start) - new Date(a.date_start));\n  if (completed.length) return { race: completed[0], reason: 'senaste avslutade helg (demo)' };\n\n  return { race: races[races.length - 1], reason: 'fallback' };\n}\n\nasync function getFastestLapRanks(sessionKey) {\n  if (!sessionKey) return new Map();\n  const results = await fetchJson(`/session_result?session_key=${sessionKey}`);\n  if (!Array.isArray(results)) return new Map();\n  const ranks = new Map();\n  for (const row of results) {\n    if (row.position != null && row.driver_number != null) ranks.set(row.driver_number, row.position);\n  }\n  return ranks;\n}\n\nconst allSessions = await fetchJson(`/sessions?year=${SEASON}`);\nconst body = $input.first()?.json?.body || {};\nconst meetingKeyOverride = body.meeting_key ? Number(body.meeting_key) : null;\n\nlet meetingKey = meetingKeyOverride;\nlet selectionReason = meetingKeyOverride ? 'manuellt meeting_key (webhook)' : null;\n\nif (!meetingKey) {\n  const picked = pickTargetRace(allSessions);\n  meetingKey = picked.race.meeting_key;\n  selectionReason = picked.reason;\n}\n\nconst meetingSessions = allSessions.filter((s) => s.meeting_key === meetingKey);\nconst raceSession = sessionByName(meetingSessions, meetingKey, 'Race');\nconst qualSession = sessionByName(meetingSessions, meetingKey, 'Qualifying');\nconst fp3 = sessionByName(meetingSessions, meetingKey, 'Practice 3');\nconst fp2 = sessionByName(meetingSessions, meetingKey, 'Practice 2');\nconst fp1 = sessionByName(meetingSessions, meetingKey, 'Practice 1');\n\nconst drivers = await fetchJson(`/drivers?meeting_key=${meetingKey}`);\nconst driverMap = new Map(drivers.map((d) => [d.driver_number, d]));\n\nlet qualRanks = new Map();\nlet hasQual = false;\nif (qualSession) {\n  const qualResults = await fetchJson(`/session_result?session_key=${qualSession.session_key}`);\n  if (Array.isArray(qualResults) && qualResults.length > 0) {\n    hasQual = true;\n    for (const row of qualResults) {\n      if (row.position != null) qualRanks.set(row.driver_number, row.position);\n    }\n  }\n}\n\nconst fp3Ranks = await getFastestLapRanks(fp3?.session_key);\nconst fp2Ranks = await getFastestLapRanks(fp2?.session_key);\nconst fp1Ranks = await getFastestLapRanks(fp1?.session_key);\n\nconst w = hasQual\n  ? WEIGHTS\n  : {\n      qual: 0,\n      fp3: WEIGHTS.fp3 * PRACTICE_ONLY_SCALE,\n      fp2: WEIGHTS.fp2 * PRACTICE_ONLY_SCALE,\n      fp1: WEIGHTS.fp1 * PRACTICE_ONLY_SCALE,\n    };\n\nconst allDrivers = new Set([...qualRanks.keys(), ...fp3Ranks.keys(), ...fp2Ranks.keys(), ...fp1Ranks.keys()]);\nconst scored = [];\n\nfor (const driverNumber of allDrivers) {\n  let score = 0;\n  const breakdown = {};\n  if (hasQual && qualRanks.has(driverNumber)) {\n    breakdown.qual = qualRanks.get(driverNumber);\n    score += breakdown.qual * w.qual;\n  }\n  if (fp3Ranks.has(driverNumber)) {\n    breakdown.fp3 = fp3Ranks.get(driverNumber);\n    score += breakdown.fp3 * w.fp3;\n  }\n  if (fp2Ranks.has(driverNumber)) {\n    breakdown.fp2 = fp2Ranks.get(driverNumber);\n    score += breakdown.fp2 * w.fp2;\n  }\n  if (fp1Ranks.has(driverNumber)) {\n    breakdown.fp1 = fp1Ranks.get(driverNumber);\n    score += breakdown.fp1 * w.fp1;\n  }\n  if (score > 0) scored.push({ driverNumber, score, breakdown });\n}\n\nscored.sort((a, b) => a.score - b.score);\n\nconst podium = scored.slice(0, 3).map((entry, i) => {\n  const d = driverMap.get(entry.driverNumber) || {};\n  return {\n    position: `P${i + 1}`,\n    driver_number: entry.driverNumber,\n    name: d.full_name || d.broadcast_name || `#${entry.driverNumber}`,\n    acronym: d.name_acronym || '?',\n    score: Math.round(entry.score * 10) / 10,\n    breakdown: entry.breakdown,\n  };\n});\n\nconst confidence = hasQual\n  ? 'Hög – kvalresultat inkluderat'\n  : 'Medel – endast träning (normaliserade vikter)';\n\nreturn [{\n  json: {\n    meeting_key: meetingKey,\n    circuit: raceSession?.circuit_short_name || raceSession?.location,\n    country: raceSession?.country_name,\n    race_date: raceSession?.date_start,\n    selection_reason: selectionReason,\n    has_qualifying: hasQual,\n    confidence,\n    podium,\n    generated_at: new Date().toISOString(),\n  },\n}];"
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567004",
+      "name": "Predict Podium",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 480]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const data = $input.first().json;\nconst raceDate = data.race_date\n  ? new Date(data.race_date).toLocaleString('sv-SE', { timeZone: 'Europe/Stockholm', dateStyle: 'medium', timeStyle: 'short' })\n  : 'okänt datum';\n\nconst lines = data.podium.map((p) => {\n  const parts = [];\n  if (p.breakdown.qual) parts.push(`Q${p.breakdown.qual}`);\n  if (p.breakdown.fp3) parts.push(`FP3 P${p.breakdown.fp3}`);\n  if (p.breakdown.fp2) parts.push(`FP2 P${p.breakdown.fp2}`);\n  if (p.breakdown.fp1) parts.push(`FP1 P${p.breakdown.fp1}`);\n  return `${p.position}: #${p.driver_number} ${p.name} (${p.acronym}) – poäng ${p.score} [${parts.join(', ')}]`;\n});\n\nconst message = [\n  '🏎️ F1 Poddiumsprediktion',\n  `${data.circuit}, ${data.country}`,\n  `Race: ${raceDate}`,\n  `Urval: ${data.selection_reason}`,\n  `Tillförlitlighet: ${data.confidence}`,\n  '',\n  ...lines,\n  '',\n  'Lägre poäng = bättre förutsagd placering.',\n  'Data: OpenF1 (api.openf1.org)',\n].join('\\n');\n\nreturn [{\n  json: {\n    ...data,\n    message,\n    message_short: lines.join(' | '),\n  },\n}];"
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567005",
+      "name": "Format Swedish Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [780, 480]
+    },
+    {
+      "parameters": {
+        "content": "## Notifiering\n\nKoppla valfri nod **efter** \"Format Swedish Message\":\n\n- **Slack** – fält `message`\n- **Email** – brödtext `message`\n- **Telegram** – text `message`\n\n### Webhook (valfritt)\nPOST till `/webhook/f1-podium-prediction` med body:\n```json\n{ \"meeting_key\": 1286 }\n```\n\n### F1tting-integration (senare)\nLägg till HTTP Request-nod som POST:ar `podium` till din F1tting-server.",
+        "height": 340,
+        "width": 420
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567006",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [980, 280]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Predict Podium",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Predict Podium",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Predict Podium",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Predict Podium": {
+      "main": [
+        [
+          {
+            "node": "Format Swedish Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}
