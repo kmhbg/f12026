@@ -105,13 +105,15 @@ function registerApiRoutes(app, deps) {
   });
 
   app.post("/api/auth/login", (req, res) => {
-    const id = slugifyUsername(req.body?.username);
+    const login = String(req.body?.username || "");
+    const id = slugifyUsername(login);
     const password = String(req.body?.password || "");
     const key = `${req.ip}|${id}`;
     if (loginLimiter.tooMany(key)) {
       return res.status(429).json({ error: "För många försök, vänta en stund" });
     }
-    const user = id ? store.getUser(id) : null;
+    // Användarnamnet i första hand; visningsnamnet ("Sebastian") fungerar också.
+    const user = (id && store.getUser(id)) || store.findUserByName(login);
     if (!user || !verifyPassword(password, user.password_hash)) {
       loginLimiter.fail(key);
       return res.status(401).json({ error: "Fel användarnamn eller lösenord" });

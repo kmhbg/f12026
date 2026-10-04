@@ -23,6 +23,11 @@ test("inloggning, behörighet och racebets", async (t) => {
   assert.equal((await filip("POST", `/api/auth/invite/${token}`, { password: "filips-losen" })).status, 200);
   assert.equal((await anon("POST", `/api/auth/invite/${token}`, { password: "igen-igen-igen" })).status, 404);
 
+  // Inloggning med visningsnamnet fungerar också
+  const byName = app.client();
+  assert.equal((await byName("POST", "/api/auth/login", { username: "filip", password: "filips-losen" })).status, 200);
+  assert.equal((await byName("POST", "/api/auth/login", { username: "Filip", password: "filips-losen" })).status, 200);
+
   // Behörighet
   assert.equal((await filip("GET", "/api/users")).status, 403);
   assert.equal((await filip("DELETE", "/api/users/seb")).status, 403);
