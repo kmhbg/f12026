@@ -92,6 +92,33 @@
         <a href="/settlement.html">Rättning racebet</a>
       </section>
 
+      <section class="section-block">
+        <h2>Poängregler för racebet</h2>
+        <p class="info">Styr topplistan på dashboarden. Utbetalningen påverkas inte, den följer fortfarande exakt topp 3.</p>
+        <form id="admin-scoring-form" class="admin-inline-form">
+          <label>Rätt förare, rätt plats <input type="number" name="exact" min="0" max="100" step="1" required /></label>
+          <label>Rätt förare, fel plats <input type="number" name="podium" min="0" max="100" step="1" required /></label>
+          <label>Bonus exakt topp 3 <input type="number" name="perfectBonus" min="0" max="100" step="1" required /></label>
+          <button type="submit">Spara poäng</button>
+          <span id="admin-scoring-status" class="status"></span>
+        </form>
+      </section>
+
+      <section class="section-block">
+        <h2>Replay-cache</h2>
+        <p id="admin-cache-info" class="info"></p>
+        <div class="table-scroll">
+          <table id="admin-cache-table">
+            <thead>
+              <tr><th>Session</th><th>Datum</th><th class="num">Storlek</th><th>Senast använd</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button id="admin-cache-prune-btn" type="button">Rensa nu</button>
+        <span id="admin-cache-status" class="status"></span>
+      </section>
+
       <section id="admin-summary-section">
         <h2>Sammanställning av bets</h2>
 
@@ -165,6 +192,7 @@
     </footer>
 
     <script src="auth.js"></script>
+    <script src="branding.js"></script>
     <script src="admin.js"></script>
   </body>
 </html>

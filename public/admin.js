@@ -33,10 +33,12 @@ async function loadMetadata() {
   adminState.users = data.users;
   adminState.sessions = data.sessions;
   adminState.drivers = data.drivers;
+  adminState.scoring = data.scoring || null;
 
   populateUserSelects();
   populateRaceSelect();
   updateSeasonOverrideUI();
+  fillScoringForm();
 }
 
 function populateUserSelects() {
@@ -550,12 +552,103 @@ function adminShowRaceSummary() {
   renderSingleRaceSummary(sessionKey);
 }
 
+function fillScoringForm() {
+  const form = $("admin-scoring-form");
+  if (!form || !adminState.scoring) return;
+  Object.entries(adminState.scoring).forEach(([key, value]) => {
+    if (form.elements[key]) form.elements[key].value = value;
+  });
+}
+
+async function saveScoring(event) {
+  event.preventDefault();
+  const form = event.target;
+  const statusEl = $("admin-scoring-status");
+  const body = Object.fromEntries(["exact", "podium", "perfectBonus"].map((k) => [k, Number(form.elements[k].value)]));
+  statusEl.textContent = "Sparar…";
+  try {
+    const res = await fetch(`${API_BASE}/settings/scoring`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Kunde inte spara");
+    adminState.scoring = data.scoring;
+    fillScoringForm();
+    statusEl.textContent = "Sparat.";
+  } catch (err) {
+    statusEl.textContent = err.message;
+  }
+}
+
+function formatBytes(bytes) {
+  const mb = (Number(bytes) || 0) / 1024 / 1024;
+  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`;
+}
+
+async function loadCacheStatus() {
+  const tbody = $("admin-cache-table")?.querySelector("tbody");
+  if (!tbody) return;
+  const res = await fetch(`${API_BASE}/admin/cache`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    $("admin-cache-info").textContent = data.error || "Kunde inte läsa cachen.";
+    return;
+  }
+  const total = data.entries.reduce((sum, e) => sum + (e.sizeBytes || 0), 0);
+  $("admin-cache-info").textContent =
+    `Replay-data för de ${data.raceCount} senaste racen hålls cachad. Pinnade och nyss använda sessioner (24 h) ` +
+    `sparas också, resten rensas automatiskt. Totalt ${formatBytes(total)}.`;
+  tbody.innerHTML = "";
+  if (!data.entries.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="info">Inget cachat ännu.</td></tr>`;
+    return;
+  }
+  data.entries.forEach((e) => {
+    const tr = document.createElement("tr");
+    const status = e.pinned ? "Pinnad" : e.latest ? "Senaste race" : "Tillfällig (24 h)";
+    tr.innerHTML = `
+      <td></td>
+      <td>${e.date ? new Date(e.date).toLocaleDateString() : "–"}</td>
+      <td class="num">${formatBytes(e.sizeBytes)}</td>
+      <td>${e.lastUsedAt ? new Date(e.lastUsedAt).toLocaleString() : "–"}</td>
+      <td>${status}</td>
+      <td><button type="button">${e.pinned ? "Avpinna" : "Pinna"}</button></td>`;
+    tr.cells[0].textContent = e.label;
+    tr.querySelector("button").addEventListener("click", async () => {
+      await fetch(`${API_BASE}/admin/cache/${encodeURIComponent(e.sessionKey)}/pin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: !e.pinned })
+      });
+      loadCacheStatus();
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+async function pruneCache() {
+  const statusEl = $("admin-cache-status");
+  statusEl.textContent = "Rensar…";
+  const res = await fetch(`${API_BASE}/admin/cache/prune`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  const data = await res.json().catch(() => ({}));
+  statusEl.textContent = res.ok ? `Rensade ${data.pruned.length} session(er).` : data.error || "Misslyckades";
+  loadCacheStatus();
+}
+
 function setupAdminListeners() {
   $("admin-add-user-btn").addEventListener("click", adminAddUser);
   $("admin-delete-user-btn").addEventListener("click", adminDeleteUser);
   $("admin-invite-user-btn").addEventListener("click", adminNewInvite);
   $("admin-load-summary-btn").addEventListener("click", loadSummary);
   $("admin-show-race-btn").addEventListener("click", adminShowRaceSummary);
+  $("admin-scoring-form")?.addEventListener("submit", saveScoring);
+  $("admin-cache-prune-btn")?.addEventListener("click", pruneCache);
   const seasonOverrideBtn = $("admin-season-override-btn");
   if (seasonOverrideBtn) {
     seasonOverrideBtn.addEventListener("click", toggleSeasonOverride);
@@ -570,5 +663,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   setupAdminListeners();
   await loadMetadata();
+  loadCacheStatus();
 });
 

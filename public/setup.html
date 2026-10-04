@@ -45,8 +45,12 @@
     <main>
       <h1 class="page-title">Kom igång</h1>
       <section class="section-block auth-box">
-        <p class="info">Skapa det första kontot. Det blir admin och kan sedan bjuda in resten av gänget.</p>
+        <p class="info">Registrera administratören. Kontot kan sedan bjuda in resten av gruppen från Admin.</p>
         <form id="setup-form" class="auth-form">
+          <div id="setup-token-field" class="hidden">
+            <label for="setupToken">Installationskod (SETUP_TOKEN i .env)</label>
+            <input id="setupToken" name="setupToken" autocomplete="off" />
+          </div>
           <label for="name">Namn</label>
           <input id="name" name="name" autocomplete="name" required />
           <label for="username">Användarnamn</label>
@@ -62,6 +66,7 @@
     </main>
 
     <script src="auth.js"></script>
+    <script src="branding.js"></script>
     <script src="auth-pages.js"></script>
   </body>
 </html>

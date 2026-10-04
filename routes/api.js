@@ -11,6 +11,7 @@ const {
   slugifyUsername
 } = require("../lib/auth");
 const { computeSettlements } = require("../lib/settlement");
+const { computeLeaderboard, normalizeScoring } = require("../lib/scoring");
 
 function registerApiRoutes(app, deps) {
   const {
@@ -19,6 +20,7 @@ function registerApiRoutes(app, deps) {
     seasonYear,
     stake,
     publicUrl,
+    setupToken = "",
     loadSessions,
     loadAllSessions,
     loadMeetings,
@@ -74,29 +76,46 @@ function registerApiRoutes(app, deps) {
     return { races, settlements, pot };
   }
 
+  // Publik: namn, säsong och insats till sidhuvuden (även före inloggning).
+  app.get("/api/config", (req, res) => {
+    res.json({ appName: deps.appName, seasonYear, stake });
+  });
+
   // ---------- Inloggning ----------
 
   app.get("/api/auth/me", (req, res) => {
-    const needsSetup = store.countUsers() === 0;
-    if (!req.user) return res.status(401).json({ user: null, needsSetup });
-    res.json({ user: publicUser(req.user), needsSetup: false });
+    const needsSetup = store.countAdmins() === 0;
+    const setup = { needsSetup, setupTokenRequired: needsSetup && Boolean(setupToken) };
+    if (!req.user) return res.status(401).json({ user: null, ...setup });
+    res.json({ user: publicUser(req.user), ...setup });
   });
 
-  // Första start: finns inga användare skapas den första som admin.
+  function matchesSetupToken(given) {
+    if (!setupToken) return true;
+    const a = Buffer.from(String(given || ""));
+    const b = Buffer.from(setupToken);
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+
+  // Registreringssidan: finns ingen admin blir den som registrerar sig admin.
+  // Med SETUP_TOKEN satt krävs dessutom koden, så att en främling inte hinner först.
   app.post("/api/auth/setup", (req, res) => {
-    const { username, name, password } = req.body || {};
+    const { username, name, password, setupToken: givenToken } = req.body || {};
     const id = slugifyUsername(username || name);
     const pwError = validatePassword(password);
     if (!id || !name) return res.status(400).json({ error: "Namn och användarnamn krävs" });
     if (pwError) return res.status(400).json({ error: pwError });
+    if (!matchesSetupToken(givenToken)) return res.status(403).json({ error: "Fel installationskod" });
 
     try {
       store.transaction(() => {
-        if (store.countUsers() > 0) throw Object.assign(new Error("setup-done"), { status: 409 });
+        if (store.countAdmins() > 0) throw Object.assign(new Error("setup-done"), { status: 409 });
+        if (store.getUser(id)) throw Object.assign(new Error("taken"), { status: 409, taken: true });
         store.createUser({ id, name: String(name).trim(), role: "admin", passwordHash: hashPassword(password) });
         store.audit(id, "setup", { id });
       });
     } catch (err) {
+      if (err.taken) return res.status(409).json({ error: "Användarnamnet är upptaget" });
       if (err.status === 409) return res.status(409).json({ error: "Appen är redan konfigurerad" });
       throw err;
     }
@@ -248,7 +267,8 @@ function registerApiRoutes(app, deps) {
         drivers,
         teams,
         seasonLocked: isSeasonLocked(sessions),
-        seasonOverrideOpen: Boolean(store.getSetting("season_override_open", false))
+        seasonOverrideOpen: Boolean(store.getSetting("season_override_open", false)),
+        scoring: normalizeScoring(store.getSetting("scoring"))
       });
     } catch (err) {
       console.error(err);
@@ -266,6 +286,21 @@ function registerApiRoutes(app, deps) {
       store.audit(req.user.id, "season-override", { enabled });
     });
     res.json({ seasonOverrideOpen: enabled });
+  });
+
+  app.post("/api/settings/scoring", requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const invalid = ["exact", "podium", "perfectBonus"].filter((k) => {
+      const n = Number(body[k]);
+      return !Number.isFinite(n) || n < 0 || n > 100;
+    });
+    if (invalid.length) return res.status(400).json({ error: `Ogiltiga poäng: ${invalid.join(", ")}` });
+    const scoring = normalizeScoring(body);
+    store.transaction(() => {
+      store.putSetting("scoring", scoring);
+      store.audit(req.user.id, "scoring", scoring);
+    });
+    res.json({ scoring });
   });
 
   // ---------- Säsongsbets ----------
@@ -476,31 +511,15 @@ function registerApiRoutes(app, deps) {
   app.get("/api/race/standings", requireUser, async (req, res) => {
     try {
       const { races, settlements, pot } = await computeSeason();
-      const users = store.listUsers();
-      const done = races
-        .filter((r) => r.top3)
-        .map((r) => {
-          const s = settlements.get(r.sessionKey);
-          return {
-            sessionKey: r.sessionKey,
-            raceName: r.raceName,
-            date: r.date,
-            resultTop3: r.top3,
-            winners: s?.winners || [],
-            totalBets: s?.totalBets || 0
-          };
-        });
-
-      const leaderboard = users
-        .map((u) => {
-          const wins = done
-            .filter((r) => r.winners.includes(u.id))
-            .map((r) => ({ sessionKey: r.sessionKey, raceName: r.raceName, date: r.date }));
-          return { userId: u.id, name: u.name, points: wins.length, wins };
-        })
-        .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-
-      res.json({ seasonYear, updatedAt: Date.now(), races: done, leaderboard, pot });
+      const board = computeLeaderboard({
+        races,
+        bets: store.listRaceBets(seasonYear),
+        settlements,
+        users: store.listUsers(),
+        stake,
+        rules: store.getSetting("scoring")
+      });
+      res.json({ seasonYear, stake, updatedAt: Date.now(), pot, ...board });
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: "Failed to load race standings" });

@@ -191,55 +191,213 @@ function allUserStats(driverMap, constructorMap) {
   }));
 }
 
-function renderRaceLeaderboard(driverMap, constructorMap) {
+// Kategoriska färger (mörkt tema), fast ordning per användare – aldrig efter placering.
+const SERIES_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+const MAX_SERIES = SERIES_COLORS.length;
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+function formatKr(value) {
+  const n = Math.round(Number(value) || 0);
+  return `${n > 0 ? "+" : ""}${n.toLocaleString("sv-SE")} kr`;
+}
+
+function shortDriver(driverNumber) {
+  const d = state.drivers.find((x) => Number(x.driver_number) === Number(driverNumber));
+  return d?.name_acronym || (d?.last_name ? d.last_name : `#${driverNumber}`);
+}
+
+// Färg per användare enligt ordningen i användarlistan, så att den inte byts när placeringen ändras.
+function userColor(userId) {
+  const index = state.users.findIndex((u) => u.id === userId);
+  return index >= 0 && index < MAX_SERIES ? SERIES_COLORS[index] : null;
+}
+
+function renderRaceLeaderboard() {
   const raceTableBody = $("race-leaderboard").querySelector("tbody");
   const raceUpdatedEl = $("race-updated");
+  const data = state.raceStandings;
   raceTableBody.innerHTML = "";
 
-  const totalScores = new Map();
-  state.users.forEach((user) => {
-    const s = computeUserSeasonStats(user.id, driverMap, constructorMap);
-    totalScores.set(
-      user.id,
-      s.totalCount > 0 ? s.totalDiff : null
-    );
+  if (!data || !Array.isArray(data.leaderboard)) {
+    raceUpdatedEl.textContent = "Kunde inte hämta tabellen.";
+    return;
+  }
+
+  const rules = data.scoring || { exact: 3, podium: 1, perfectBonus: 2 };
+  $("race-scoring-info").textContent =
+    `${rules.exact} p för rätt förare på rätt plats, ${rules.podium} p för rätt förare på fel plats ` +
+    `och ${rules.perfectBonus} p extra för exakt topp 3. Saldo = vunnet − insatt (${data.stake ?? 50} kr per bet).`;
+
+  const leader = data.leaderboard.find((e) => e.userId === data.leader);
+  const lastRace = data.races[data.races.length - 1];
+  $("race-leader").innerHTML = leader
+    ? `<span class="race-leader-label">Leder efter ${escapeHtml(lastRace?.raceName || "senaste racet")}</span>
+       <strong>${escapeHtml(leader.name)}</strong>
+       <span>${leader.points} p · ${data.races.length} race avgjorda · potten ${formatKr(data.pot).replace("+", "")}</span>`
+    : `<span class="race-leader-label">Ingen leder ännu</span><span>Inga race med poäng än.</span>`;
+
+  data.leaderboard.forEach((entry) => {
+    const tr = document.createElement("tr");
+    const change =
+      entry.rankChange > 0
+        ? `<span class="rank-up" title="Upp ${entry.rankChange} sedan förra racet">▲${entry.rankChange}</span>`
+        : entry.rankChange < 0
+          ? `<span class="rank-down" title="Ned ${-entry.rankChange} sedan förra racet">▼${-entry.rankChange}</span>`
+          : "";
+    const netClass = entry.net > 0 ? "net-positive" : entry.net < 0 ? "net-negative" : "";
+    tr.innerHTML = `
+      <td>${entry.rank} ${change}</td>
+      <td>${escapeHtml(entry.name)}</td>
+      <td class="num"><strong>${entry.points}</strong></td>
+      <td class="num">${entry.wins}</td>
+      <td class="num">${entry.racesBet}</td>
+      <td class="num ${netClass}" title="Insatt ${entry.staked} kr, vunnet ${Math.round(entry.won)} kr">${formatKr(entry.net)}</td>
+    `;
+    raceTableBody.appendChild(tr);
   });
 
-  if (state.raceStandings && Array.isArray(state.raceStandings.leaderboard)) {
-    const leaderboardWithTotal = state.raceStandings.leaderboard.map((entry) => {
-      const seasonScore = totalScores.get(entry.userId);
-      const totalScore =
-        seasonScore === null ? entry.points : entry.points - seasonScore;
-      return { ...entry, totalScore, seasonScore };
-    });
+  raceUpdatedEl.textContent = data.updatedAt
+    ? `Uppdaterad: ${new Date(data.updatedAt).toLocaleString()}`
+    : "";
 
-    leaderboardWithTotal.forEach((entry, index) => {
-      const tr = document.createElement("tr");
-      const winsCount = entry.wins ? entry.wins.length : 0;
-      const totalValue =
-        entry.seasonScore === null
-          ? `${entry.points} (race)`
-          : `${entry.totalScore.toFixed(1)} (race − diff)`;
-      tr.innerHTML = `
-        <td>${index + 1}</td>
-        <td>${entry.name}</td>
-        <td>${entry.points}</td>
-        <td>${winsCount}</td>
-        <td>${totalValue}</td>
-      `;
-      raceTableBody.appendChild(tr);
-    });
+  renderRaceMatrix(data);
+  renderRaceTrend(data);
+}
 
-    if (state.raceStandings.updatedAt) {
-      raceUpdatedEl.textContent = `Uppdaterad: ${new Date(
-        state.raceStandings.updatedAt
-      ).toLocaleString()}`;
-    } else {
-      raceUpdatedEl.textContent = "";
-    }
-  } else {
-    raceUpdatedEl.textContent = "Inga race-resultat ännu.";
+function renderRaceMatrix(data) {
+  const table = $("race-matrix");
+  if (!data.races.length) {
+    table.innerHTML = `<tbody><tr><td class="info">Inga avgjorda race ännu.</td></tr></tbody>`;
+    return;
   }
+  const maxPoints = 3 * data.scoring.exact + data.scoring.perfectBonus || 1;
+  const head = data.races
+    .map((r, i) => {
+      const result = r.resultTop3.map((n, j) => `P${j + 1} ${shortDriver(n)}`).join(", ");
+      const label = escapeHtml((r.raceName || `Race ${i + 1}`).replace(/ Grand Prix$/i, ""));
+      return `<th class="num" title="${escapeHtml(r.raceName)}: ${escapeHtml(result)}">${label}</th>`;
+    })
+    .join("");
+  const rows = data.leaderboard
+    .map((entry) => {
+      const cells = data.races
+        .map((r) => {
+          const cell = entry.perRace[r.sessionKey];
+          if (!cell) return `<td class="num matrix-empty">–</td>`;
+          const strength = Math.min(1, cell.points / maxPoints);
+          const picks = cell.picks.map((n) => shortDriver(n)).join(", ");
+          return `<td class="num matrix-cell${cell.perfect ? " matrix-perfect" : ""}"
+                      style="--strength:${strength.toFixed(2)}"
+                      title="${escapeHtml(entry.name)} – ${escapeHtml(r.raceName)}: ${cell.points} p (tips: ${escapeHtml(picks)})">${cell.points}${cell.perfect ? " ★" : ""}</td>`;
+        })
+        .join("");
+      return `<tr><th scope="row">${escapeHtml(entry.name)}</th>${cells}<td class="num"><strong>${entry.points}</strong></td></tr>`;
+    })
+    .join("");
+  table.innerHTML = `<thead><tr><th>Användare</th>${head}<th class="num">Totalt</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+// Linjediagram (inline SVG) med ackumulerade poäng per användare och race.
+function renderRaceTrend(data) {
+  const el = $("race-trend");
+  if (data.races.length < 2) {
+    el.innerHTML = `<p class="info">Grafen visas när minst två race är avgjorda.</p>`;
+    return;
+  }
+  const series = data.leaderboard.map((e) => ({ ...e, color: userColor(e.userId) }));
+  const colored = series.filter((s) => s.color);
+  const others = series.filter((s) => !s.color);
+
+  const W = 720;
+  const H = 300;
+  const pad = { top: 16, right: 92, bottom: 34, left: 36 };
+  const n = data.races.length;
+  const maxY = Math.max(1, ...series.map((s) => s.points));
+  const niceMax = Math.ceil(maxY / 5) * 5;
+  const x = (i) => pad.left + (i * (W - pad.left - pad.right)) / (n - 1);
+  const y = (v) => H - pad.bottom - (v * (H - pad.top - pad.bottom)) / niceMax;
+  const path = (s) => s.cumulative.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(niceMax * f));
+  const grid = ticks
+    .map((t) => `<line x1="${pad.left}" x2="${W - pad.right}" y1="${y(t)}" y2="${y(t)}" class="trend-grid"/>
+                 <text x="${pad.left - 6}" y="${y(t) + 4}" class="trend-axis" text-anchor="end">${t}</text>`)
+    .join("");
+  const step = Math.ceil(n / 8);
+  const xLabels = data.races
+    .map((r, i) =>
+      i % step === 0 || i === n - 1
+        ? `<text x="${x(i)}" y="${H - 12}" class="trend-axis" text-anchor="middle">${i + 1}</text>`
+        : "")
+    .join("");
+
+  // Direktetiketter för topp 4 i slutet av linjerna, förskjutna så att de inte krockar.
+  const labelled = colored.slice(0, 4).map((s) => ({ s, ly: y(s.points) }));
+  labelled.sort((a, b) => a.ly - b.ly);
+  labelled.forEach((l, i) => {
+    if (i > 0 && l.ly - labelled[i - 1].ly < 14) l.ly = labelled[i - 1].ly + 14;
+  });
+  const labels = labelled
+    .map((l) => `<text x="${x(n - 1) + 8}" y="${l.ly + 4}" class="trend-label">${escapeHtml(l.s.name)} ${l.s.points}</text>`)
+    .join("");
+
+  const lines =
+    others.map((s) => `<path d="${path(s)}" class="trend-line trend-other"/>`).join("") +
+    colored
+      .slice()
+      .reverse()
+      .map((s) => `<path d="${path(s)}" class="trend-line" stroke="${s.color}"/>
+                   <circle cx="${x(n - 1)}" cy="${y(s.points)}" r="4" fill="${s.color}" class="trend-end"/>`)
+      .join("");
+
+  const legend = colored
+    .map((s) => `<span class="trend-legend-item"><span class="trend-swatch" style="background:${s.color}"></span>${escapeHtml(s.name)}</span>`)
+    .join("") + (others.length ? `<span class="trend-legend-item"><span class="trend-swatch trend-swatch-other"></span>Övriga (${others.length})</span>` : "");
+
+  el.innerHTML = `
+    <div class="trend-legend">${legend}</div>
+    <div class="trend-plot">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ackumulerade poäng per användare över ${n} race">
+        ${grid}${xLabels}
+        <text x="${W - pad.right}" y="${H - 12}" class="trend-axis" text-anchor="end" dx="70">race</text>
+        ${lines}${labels}
+        <line class="trend-crosshair" y1="${pad.top}" y2="${H - pad.bottom}" visibility="hidden"/>
+        <rect class="trend-hit" x="${pad.left - 10}" y="0" width="${W - pad.left - pad.right + 20}" height="${H}"/>
+      </svg>
+      <div class="trend-tooltip" hidden></div>
+    </div>`;
+
+  const svg = el.querySelector("svg");
+  const crosshair = el.querySelector(".trend-crosshair");
+  const tooltip = el.querySelector(".trend-tooltip");
+  const hit = el.querySelector(".trend-hit");
+  hit.addEventListener("pointermove", (ev) => {
+    const pt = svg.createSVGPoint();
+    pt.x = ev.clientX;
+    pt.y = ev.clientY;
+    const local = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const i = Math.max(0, Math.min(n - 1, Math.round(((local.x - pad.left) / (W - pad.left - pad.right)) * (n - 1))));
+    crosshair.setAttribute("x1", x(i));
+    crosshair.setAttribute("x2", x(i));
+    crosshair.setAttribute("visibility", "visible");
+    const rows = series
+      .map((s) => ({ s, v: s.cumulative[i] }))
+      .sort((a, b) => b.v - a.v)
+      .map(({ s, v }) => `<div><span class="trend-swatch" style="background:${s.color || "var(--text-muted)"}"></span>${escapeHtml(s.name)} <strong>${v}</strong></div>`)
+      .join("");
+    tooltip.innerHTML = `<div class="trend-tooltip-title">${i + 1}. ${escapeHtml(data.races[i].raceName)}</div>${rows}`;
+    tooltip.hidden = false;
+    const box = svg.getBoundingClientRect();
+    const px = (x(i) / W) * box.width;
+    tooltip.style.left = `${px > box.width / 2 ? px - tooltip.offsetWidth - 12 : px + 12}px`;
+  });
+  hit.addEventListener("pointerleave", () => {
+    crosshair.setAttribute("visibility", "hidden");
+    tooltip.hidden = true;
+  });
 }
 
 function renderKpis(statsList) {
@@ -612,7 +770,7 @@ function renderDashboard() {
     updatedEl.textContent = "";
   }
 
-  renderRaceLeaderboard(driverMap, constructorMap);
+  renderRaceLeaderboard();
   renderKpis(statsList);
   renderSeasonRanking(statsList);
   renderUserPicker();

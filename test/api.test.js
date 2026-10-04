@@ -121,3 +121,62 @@ test("import från WhatsApp och omräknad avräkning", async (t) => {
   assert.equal(s.data.pot, 0);
   assert.equal(app.store.getResult(100).join(","), "3,12,44", "resultatet cachas");
 });
+
+test("registreringssidan skapar admin även när medlemmar redan finns", async (t) => {
+  const app = await startTestApp();
+  t.after(app.close);
+  // Som efter migrering utan --admin: användare finns, men ingen admin.
+  app.store.createUser({ id: "filip", name: "Filip" });
+  const c = app.client();
+
+  assert.equal((await c("GET", "/api/auth/me")).data.needsSetup, true);
+  const taken = await c("POST", "/api/auth/setup", { name: "Filip", username: "filip", password: "hemligt123" });
+  assert.equal(taken.status, 409, "befintlig användare tas inte över");
+  assert.equal(taken.data.error, "Användarnamnet är upptaget");
+  assert.equal((await c("POST", "/api/auth/setup", { name: "Seb", username: "seb", password: "hemligt123" })).status, 201);
+  assert.equal((await c("GET", "/api/auth/me")).data.needsSetup, false);
+  assert.equal(app.store.getUser("seb").role, "admin");
+  assert.equal(app.store.getUser("filip").role, "member");
+});
+
+test("SETUP_TOKEN krävs för registreringen när den är satt", async (t) => {
+  const app = await startTestApp({ setupToken: "hemlig-kod" });
+  t.after(app.close);
+  const c = app.client();
+  const me = await c("GET", "/api/auth/me");
+  assert.equal(me.data.setupTokenRequired, true);
+
+  const body = { name: "Seb", username: "seb", password: "hemligt123" };
+  assert.equal((await c("POST", "/api/auth/setup", body)).status, 403);
+  assert.equal((await c("POST", "/api/auth/setup", { ...body, setupToken: "fel" })).status, 403);
+  assert.equal((await c("POST", "/api/auth/setup", { ...body, setupToken: "hemlig-kod" })).status, 201);
+  assert.equal((await c("GET", "/api/auth/me")).data.setupTokenRequired, false);
+});
+
+test("topplista med poäng och saldo, och poängregler från admin", async (t) => {
+  const app = await startTestApp();
+  t.after(app.close);
+  const admin = app.client();
+  await admin("POST", "/api/auth/setup", { name: "Seb", username: "seb", password: "hemligt123" });
+  const config = await app.client()("GET", "/api/config");
+  assert.deepEqual(config.data, { appName: "Test", seasonYear: 2026, stake: 50 });
+
+  // Race 100 är kört med resultatet 3-12-44.
+  app.store.saveRaceBet({ userId: "seb", seasonYear: 2026, sessionKey: 100, p1: 3, p2: 44, p3: 12 });
+  let res = await admin("GET", "/api/race/standings");
+  assert.equal(res.status, 200);
+  const seb = res.data.leaderboard.find((e) => e.userId === "seb");
+  assert.equal(seb.points, 3 + 1 + 1);
+  assert.equal(seb.net, -50);
+  assert.equal(res.data.races[0].sessionKey, "100");
+  assert.deepEqual(res.data.scoring, { exact: 3, podium: 1, perfectBonus: 2 });
+
+  const member = app.client();
+  const invite = await admin("POST", "/api/users", { name: "Filip" });
+  await member("POST", `/api/auth/invite/${invite.data.inviteUrl.split("#")[1]}`, { password: "filips-losen" });
+  assert.equal((await member("POST", "/api/settings/scoring", { exact: 5, podium: 2, perfectBonus: 0 })).status, 403);
+  assert.equal((await admin("POST", "/api/settings/scoring", { exact: -1, podium: 2, perfectBonus: 0 })).status, 400);
+  assert.equal((await admin("POST", "/api/settings/scoring", { exact: 5, podium: 2, perfectBonus: 0 })).status, 200);
+  res = await admin("GET", "/api/race/standings");
+  assert.equal(res.data.leaderboard.find((e) => e.userId === "seb").points, 5 + 2 + 2);
+});

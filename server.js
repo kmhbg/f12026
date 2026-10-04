@@ -8,14 +8,16 @@ const { openDatabase, scheduleBackups } = require("./lib/db");
 const { createStore } = require("./lib/store");
 const { createAuth } = require("./lib/auth");
 const { registerApiRoutes } = require("./routes/api");
+const { selectCachesToPrune } = require("./lib/cache-policy");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SEASON_YEAR = Number(process.env.SEASON_YEAR) || new Date().getFullYear();
-const APP_NAME = process.env.APP_NAME || "F1 Betting";
+const APP_NAME = process.env.APP_NAME || "F1tting";
 const STAKE_PER_BET = Number(process.env.STAKE_PER_BET) || 50;
 const PUBLIC_URL = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
+const SETUP_TOKEN = String(process.env.SETUP_TOKEN || "").trim();
 const APP_VERSION = process.env.APP_VERSION || require("./package.json").version;
 
 const dataDir = path.resolve(process.env.DATA_DIR || path.join(__dirname, "data"));
@@ -57,7 +59,7 @@ app.use("/api", auth.requireJsonForWrites);
 
 // Allt under /api kräver inloggning utom inloggningen själv, hälsokontrollen
 // och importen (som har egen token).
-const PUBLIC_API_PATHS = [/^\/auth\//, /^\/health$/, /^\/bets\/race\/[^/]+\/[^/]+\/import$/];
+const PUBLIC_API_PATHS = [/^\/auth\//, /^\/health$/, /^\/config$/, /^\/bets\/race\/[^/]+\/[^/]+\/import$/];
 app.use("/api", (req, res, next) =>
   PUBLIC_API_PATHS.some((re) => re.test(req.path)) ? next() : auth.requireUser(req, res, next)
 );
@@ -120,7 +122,9 @@ const REPLAY_SESSION_DATA_TTL_MS = 30 * 60 * 1000;
 const OPENF1_MIN_INTERVAL_MS = 400;
 const CACHE_SYNC_INTERVAL_MS = Number(process.env.CACHE_SYNC_INTERVAL_MS) || 6 * 60 * 60 * 1000;
 const CACHE_SYNC_MAX_SESSIONS = Number(process.env.CACHE_SYNC_MAX_SESSIONS) || 0;
-const CACHE_PREWARM_RACE_COUNT = Number(process.env.CACHE_PREWARM_RACE_COUNT) || 3;
+// Antal senaste race vars replay-data hålls cachad (äldre rensas automatiskt).
+const CACHE_PREWARM_RACE_COUNT =
+  Number(process.env.CACHE_RACE_COUNT) || Number(process.env.CACHE_PREWARM_RACE_COUNT) || 2;
 const openF1MqttEnv = loadOpenF1MqttEnv(process.env);
 const OPENF1_USERNAME = openF1MqttEnv.accountUsername;
 const OPENF1_PASSWORD = openF1MqttEnv.accountPassword;
@@ -659,6 +663,11 @@ function readSessionCacheResource(sessionKey, resource) {
 function loadSessionCacheData(sessionKey) {
   const key = String(sessionKey);
   if (!isSessionCacheComplete(key)) return null;
+  try {
+    store.touchCache(key);
+  } catch {
+    // Användningstiden är bara en hint till rensningen.
+  }
   return {
     meta: readSessionCacheMeta(key),
     drivers: readSessionCacheResource(key, "drivers") || [],
@@ -922,6 +931,7 @@ function writeSessionCache(sessionKey, payload) {
   Object.entries(resources).forEach(([name, data]) => {
     fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(data));
   });
+  const builtAt = new Date().toISOString();
   fs.writeFileSync(
     path.join(dir, "meta.json"),
     JSON.stringify(
@@ -929,7 +939,7 @@ function writeSessionCache(sessionKey, payload) {
         version: SESSION_CACHE_VERSION,
         complete: true,
         sessionKey: Number(sessionKey),
-        builtAt: new Date().toISOString(),
+        builtAt,
         dateStart: payload.dateStart,
         dateEnd: payload.dateEnd,
         counts: {
@@ -954,6 +964,11 @@ function writeSessionCache(sessionKey, payload) {
       2
     )
   );
+  try {
+    store.recordCache(sessionKey, directorySize(dir), builtAt);
+  } catch (err) {
+    console.error(`[cache] Kunde inte registrera cache för ${sessionKey}:`, err.message);
+  }
 }
 
 async function buildSessionCache(sessionKey, sessionHint = null) {
@@ -1266,11 +1281,85 @@ async function syncSessionCaches(options = {}) {
   return result;
 }
 
+function directorySize(dir) {
+  let total = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    total += entry.isDirectory() ? directorySize(full) : fs.statSync(full).size;
+  }
+  return total;
+}
+
+function listCachedSessionKeys() {
+  try {
+    return fs
+      .readdirSync(sessionCacheDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && /^\d+$/.test(d.name))
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+// Kataloger på disk som saknar rad i databasen (t.ex. byggda före migrering 002)
+// registreras med byggtiden från meta.json; rader utan katalog tas bort.
+function reconcileCacheEntries() {
+  const onDisk = new Set(listCachedSessionKeys());
+  const known = new Map(store.listCacheEntries().map((e) => [String(e.sessionKey), e]));
+  for (const key of onDisk) {
+    if (known.has(key)) continue;
+    const meta = readSessionCacheMeta(key);
+    store.recordCache(key, directorySize(sessionCachePath(key)), meta?.builtAt || new Date(0).toISOString());
+  }
+  for (const key of known.keys()) {
+    if (!onDisk.has(key)) store.deleteCacheEntry(key);
+  }
+  return store.listCacheEntries();
+}
+
+async function cacheKeepKeys() {
+  const latest = (await listLatestFinishedRaces(CACHE_PREWARM_RACE_COUNT)).map((s) => String(s.session_key));
+  if (CACHE_SYNC_MAX_SESSIONS > CACHE_PREWARM_RACE_COUNT) {
+    const extra = (await listFinishedSessionsForCacheSync()).slice(0, CACHE_SYNC_MAX_SESSIONS);
+    extra.forEach((s) => latest.push(String(s.session_key)));
+  }
+  return latest;
+}
+
+async function pruneSessionCaches() {
+  const entries = reconcileCacheEntries();
+  const latestRaceKeys = await cacheKeepKeys();
+  // Tom kalender betyder oftast att OpenF1 rate-limitar – rensa då inget,
+  // annars skulle även de senaste racen tas bort.
+  if (latestRaceKeys.length === 0) {
+    console.warn("[cache-prune] Hoppar över rensning: racekalendern är inte tillgänglig");
+    return { pruned: [], kept: [], skipped: "calendar-unavailable" };
+  }
+  const buildingKeys = [...sessionCacheBuildsInFlight.keys(), ...sessionCacheBuildProgress.keys()];
+  const toPrune = selectCachesToPrune({
+    cachedKeys: entries.map((e) => String(e.sessionKey)),
+    entries,
+    latestRaceKeys,
+    buildingKeys
+  });
+  for (const key of toPrune) {
+    fs.rmSync(sessionCachePath(key), { recursive: true, force: true });
+    store.deleteCacheEntry(key);
+    replaySessionDataCache.delete(key);
+    replayLocationsIndexCache.delete(key);
+    replayTeamRadioListCache.delete(key);
+    console.log(`[cache-prune] Rensade session ${key}`);
+  }
+  return { pruned: toPrune, kept: latestRaceKeys };
+}
+
 function startCacheSyncScheduler() {
   const run = () => {
-    prewarmRaceCaches().catch((err) => {
-      console.error("[cache-prewarm] Bakgrundsjobb misslyckades:", err.message);
-    });
+    prewarmRaceCaches()
+      .then(() => pruneSessionCaches())
+      .catch((err) => {
+        console.error("[cache-prewarm] Bakgrundsjobb misslyckades:", err.message);
+      });
   };
   run();
   setInterval(run, CACHE_SYNC_INTERVAL_MS);
@@ -2198,7 +2287,7 @@ app.get("/api/health", (req, res) => {
     uptimeSeconds: Math.round(process.uptime()),
     races: Array.isArray(cachedSessions) ? cachedSessions.length : null,
     lastOpenF1SuccessAt,
-    needsSetup: store.countUsers() === 0
+    needsSetup: store.countAdmins() === 0
   });
 });
 
@@ -2209,6 +2298,7 @@ registerApiRoutes(app, {
   seasonYear: SEASON_YEAR,
   stake: STAKE_PER_BET,
   publicUrl: PUBLIC_URL,
+  setupToken: SETUP_TOKEN,
   loadSessions,
   loadAllSessions,
   loadMeetings,
@@ -2337,6 +2427,49 @@ app.get("/api/live/replay/timeline", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load replay timeline" });
+  }
+});
+
+// Admin: vilka sessioner som har replay-data cachad, pinna och rensa.
+app.get("/api/admin/cache", auth.requireAdmin, async (req, res) => {
+  try {
+    const entries = reconcileCacheEntries();
+    const [sessions, keepKeys] = await Promise.all([loadAllSessions().catch(() => []), cacheKeepKeys().catch(() => [])]);
+    const byKey = new Map(sessions.map((s) => [String(s.session_key), s]));
+    const keep = new Set(keepKeys);
+    res.json({
+      raceCount: CACHE_PREWARM_RACE_COUNT,
+      entries: entries.map((e) => {
+        const s = byKey.get(String(e.sessionKey));
+        return {
+          ...e,
+          label: s ? `${s.location || s.circuit_short_name || "?"} – ${s.session_name || "Session"}` : `Session ${e.sessionKey}`,
+          date: s?.date_start || null,
+          latest: keep.has(String(e.sessionKey))
+        };
+      })
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Kunde inte läsa cachen" });
+  }
+});
+
+app.post("/api/admin/cache/:sessionKey/pin", auth.requireAdmin, (req, res) => {
+  const pinned = req.body?.pinned === true;
+  if (!store.setCachePinned(req.params.sessionKey, pinned)) return res.status(404).json({ error: "Sessionen är inte cachad" });
+  store.audit(req.user.id, "cache-pin", { sessionKey: Number(req.params.sessionKey), pinned });
+  res.json({ ok: true, pinned });
+});
+
+app.post("/api/admin/cache/prune", auth.requireAdmin, async (req, res) => {
+  try {
+    const result = await pruneSessionCaches();
+    store.audit(req.user.id, "cache-prune", { pruned: result.pruned.length });
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Rensningen misslyckades" });
   }
 });
 

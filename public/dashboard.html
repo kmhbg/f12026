@@ -47,22 +47,38 @@
 
       <section class="section-block">
         <h2>Racebet – tabell</h2>
-        <p class="info">Vinst = 1 poäng. Delas om flera har rätt.</p>
+        <p id="race-scoring-info" class="info"></p>
+        <div id="race-leader" class="race-leader"></div>
         <div class="table-scroll">
           <table id="race-leaderboard">
             <thead>
               <tr>
                 <th>Plats</th>
                 <th>Användare</th>
-                <th>Poäng</th>
-                <th>Vinster</th>
-                <th>Total (race + årsbet)</th>
+                <th class="num">Poäng</th>
+                <th class="num">Vinster</th>
+                <th class="num">Race</th>
+                <th class="num">Saldo</th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
         <p id="race-updated" class="info"></p>
+      </section>
+
+      <section class="section-block">
+        <h2>Poäng över säsongen</h2>
+        <p class="info">Ackumulerade poäng efter varje race. Håll över grafen för att se ställningen efter ett race.</p>
+        <div id="race-trend" class="race-trend"></div>
+      </section>
+
+      <section class="section-block">
+        <h2>Poäng per race</h2>
+        <p class="info">★ = exakt rätt topp 3. – = inget bet. Håll över ett race för resultatet.</p>
+        <div class="table-scroll">
+          <table id="race-matrix" class="race-matrix"></table>
+        </div>
       </section>
 
       <section class="section-block season-analytics">
@@ -135,6 +151,7 @@
     </footer>
 
     <script src="auth.js"></script>
+    <script src="branding.js"></script>
     <script src="dashboard.js"></script>
   </body>
 </html>

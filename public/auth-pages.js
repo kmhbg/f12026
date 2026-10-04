@@ -46,9 +46,15 @@
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => {
-        if (d.user) window.location.replace(nextUrl());
-        else if (page === "login" && d.needsSetup) window.location.replace("/setup.html");
-        else if (page === "setup" && !d.needsSetup) window.location.replace("/login.html");
+        if (page === "setup") {
+          // Registreringen är öppen så länge appen saknar admin, även för inloggade.
+          if (!d.needsSetup) window.location.replace(d.user ? nextUrl() : "/login.html");
+          else if (d.setupTokenRequired) {
+            $("setup-token-field").classList.remove("hidden");
+            $("setupToken").required = true;
+          }
+        } else if (d.needsSetup) window.location.replace("/setup.html");
+        else if (d.user) window.location.replace(nextUrl());
       });
   }
 
@@ -65,7 +71,8 @@
       await postJson("/api/auth/setup", {
         name: fd.get("name"),
         username: fd.get("username"),
-        password: fd.get("password")
+        password: fd.get("password"),
+        setupToken: fd.get("setupToken") || undefined
       });
       window.location.replace("/admin.html");
     });

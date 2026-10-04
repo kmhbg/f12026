@@ -11,7 +11,7 @@ const HOUR = 3600e3;
 
 // Startar API:et med en tillfällig databas och en fejkad racekalender:
 // 100 = körd (resultat 3-12-44), 200 = kommande, 300 = inställt.
-async function startTestApp() {
+async function startTestApp({ setupToken = "" } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "f1-test-"));
   const db = openDatabase(dataDir);
   const store = createStore(db);
@@ -35,6 +35,7 @@ async function startTestApp() {
     seasonYear: 2026,
     stake: 50,
     publicUrl: "http://test",
+    setupToken,
     loadSessions: async () => sessions,
     loadAllSessions: async () => sessions,
     loadMeetings: async () => [],

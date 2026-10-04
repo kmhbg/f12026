@@ -1,7 +1,7 @@
 // Nätverk först så att en ny version syns direkt; cachen används bara
 // offline. API-svar cachas aldrig (de är personliga och ändras hela tiden).
-const CACHE_NAME = "f1betting-v2";
-const CORE_ASSETS = ["/index.html", "/login.html", "/styles.css", "/auth.js", "/app.js", "/manifest.webmanifest"];
+const CACHE_NAME = "f1betting-v3";
+const CORE_ASSETS = ["/index.html", "/login.html", "/styles.css", "/auth.js", "/branding.js", "/app.js", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(CORE_ASSETS)));
