@@ -64,6 +64,7 @@ let cachedMeetings = null;
 let cachedMeetingsAt = 0;
 let cachedDrivers = null;
 let cachedTeams = null;
+let cachedDriversAt = 0;
 let cachedDriverStandings = null;
 let cachedConstructorStandings = null;
 let cachedStandingsAt = 0;
@@ -335,16 +336,23 @@ async function loadMeetings() {
 }
 
 async function loadDrivers() {
-  if (cachedDrivers && cachedTeams) return { drivers: cachedDrivers, teams: cachedTeams };
+  if (cachedDrivers && cachedTeams && Date.now() - cachedDriversAt < CALENDAR_TTL_MS) {
+    return { drivers: cachedDrivers, teams: cachedTeams };
+  }
   if (driversInFlight) return driversInFlight;
 
-  // Hämta aktuell gridd via senaste tillgängliga sessionen.
-  // OpenF1 har ännu inga förare knutna till 2026-racen, men "latest"
-  // ger oss senaste kända startfält (vilket är tillräckligt för vårt spel).
-  const url = `https://api.openf1.org/v1/drivers?session_key=latest`;
+  // Hämta startfältet från senaste körda racet. "latest" kan vara ett
+  // träningspass där reserver/rookies kör, så det används bara som reserv
+  // (t.ex. innan säsongens första race).
   driversInFlight = (async () => {
-  const res = await openF1Fetch(url);
-    const drivers = await res.json();
+    const raceKey = await getLatestRaceSessionKey().catch(() => null);
+    const fetchDrivers = async (key) =>
+      (await openF1Fetch(`https://api.openf1.org/v1/drivers?session_key=${key}`)).json();
+    let drivers = await fetchDrivers(raceKey || "latest");
+    // Inställda race saknar förare – ta då senaste kända startfält.
+    if (raceKey && Array.isArray(drivers) && drivers.length === 0) {
+      drivers = await fetchDrivers("latest");
+    }
 
     if (!Array.isArray(drivers)) {
       console.error("Unexpected drivers response from OpenF1:", drivers);
@@ -358,9 +366,16 @@ async function loadDrivers() {
       if (d.team_name) teamSet.add(d.team_name);
     });
     cachedTeams = Array.from(teamSet);
+    cachedDriversAt = Date.now();
 
     return { drivers: cachedDrivers, teams: cachedTeams };
-  })().finally(() => {
+  })().catch((err) => {
+    if (cachedDrivers && cachedTeams) {
+      console.error("OpenF1 drivers refresh failed, using stale cache:", err.message);
+      return { drivers: cachedDrivers, teams: cachedTeams };
+    }
+    throw err;
+  }).finally(() => {
     driversInFlight = null;
   });
 
@@ -2578,9 +2593,26 @@ app.get("/api/bets/race/:sessionKey/:userId", (req, res) => {
   res.json(bet || null);
 });
 
-app.post("/api/bets/race/:sessionKey/:userId", (req, res) => {
+app.post("/api/bets/race/:sessionKey/:userId", async (req, res) => {
   const { sessionKey, userId } = req.params;
   const body = req.body;
+
+  let session;
+  try {
+    const sessions = await loadSessions();
+    session = sessions.find((s) => String(s.session_key) === String(sessionKey));
+  } catch (err) {
+    console.error(err);
+    return res.status(503).json({ error: "Kunde inte hämta racekalendern, försök igen" });
+  }
+  if (!session) {
+    return res.status(404).json({ error: "Okänt race" });
+  }
+  const startsAt = new Date(session.date_start || session.session_start_utc);
+  if (session.is_cancelled || !(Date.now() < startsAt.getTime())) {
+    return res.status(403).json({ error: "Racet har redan startat – bettet är låst" });
+  }
+
   const db = readBetsFile();
   const now = new Date().toISOString();
 

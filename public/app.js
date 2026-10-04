@@ -507,7 +507,12 @@ async function saveRaceBet() {
     }
   );
 
-  const saved = await res.json();
+  const saved = await res.json().catch(() => null);
+  if (!res.ok) {
+    $("race-status").textContent =
+      (saved && saved.error) || "Kunde inte spara racebet";
+    return;
+  }
   state.currentRaceBet = saved;
   $("race-status").textContent = "Racebet sparat!";
   setTimeout(() => {
