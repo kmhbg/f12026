@@ -2382,14 +2382,14 @@ function settleRace(db, sessionKey, results) {
       Number(b.p3_driver_number) === top3[2]
   );
 
+  // Vinnarna delar på racets insatser (50 kr per bet). Den samlade potten
+  // betalas inte ut tills vidare; utan vinnare går insatserna till potten.
   const totalBets = raceBets.length;
-  const basePayoutTotal = totalBets * 50;
-  const payoutTotal =
-    winners.length > 0 ? basePayoutTotal + pot : basePayoutTotal;
+  const payoutTotal = totalBets * 50;
   const payoutPerWinner =
     winners.length > 0 ? payoutTotal / winners.length : 0;
 
-  const potDelta = winners.length === 0 ? payoutTotal : -pot;
+  const potDelta = winners.length === 0 ? payoutTotal : 0;
   db.settings.racePot = Math.max(0, pot + potDelta);
   db.settings.raceSettlements[sessionKey] = {
     sessionKey: String(sessionKey),
@@ -2398,7 +2398,7 @@ function settleRace(db, sessionKey, results) {
     totalBets,
     payoutTotal,
     payoutPerWinner,
-    potUsed: winners.length > 0 ? pot : 0,
+    potUsed: 0,
     potDelta,
     settledAt: new Date().toISOString()
   };
