@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { createOpenF1MqttIngestor } = require("./lib/openf1-mqtt");
 const { loadOpenF1MqttEnv } = require("./lib/openf1-mqtt-config");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
@@ -2365,6 +2366,74 @@ app.get("/api/race/standings", async (req, res) => {
   }
 });
 
+function settleRace(db, sessionKey, results) {
+  const pot = Number(db.settings.racePot) || 0;
+  const top3 = results.slice(0, 3).map((r) => Number(r.driver_number));
+  const raceBets = db.raceBets.filter(
+    (b) =>
+      b.seasonYear === SEASON_YEAR &&
+      String(b.session_key) === String(sessionKey)
+  );
+
+  const winners = raceBets.filter(
+    (b) =>
+      Number(b.p1_driver_number) === top3[0] &&
+      Number(b.p2_driver_number) === top3[1] &&
+      Number(b.p3_driver_number) === top3[2]
+  );
+
+  const totalBets = raceBets.length;
+  const basePayoutTotal = totalBets * 50;
+  const payoutTotal =
+    winners.length > 0 ? basePayoutTotal + pot : basePayoutTotal;
+  const payoutPerWinner =
+    winners.length > 0 ? payoutTotal / winners.length : 0;
+
+  const potDelta = winners.length === 0 ? payoutTotal : -pot;
+  db.settings.racePot = Math.max(0, pot + potDelta);
+  db.settings.raceSettlements[sessionKey] = {
+    sessionKey: String(sessionKey),
+    result: top3,
+    winners: winners.map((w) => w.userId),
+    totalBets,
+    payoutTotal,
+    payoutPerWinner,
+    potUsed: winners.length > 0 ? pot : 0,
+    potDelta,
+    settledAt: new Date().toISOString()
+  };
+}
+
+// Ett bet som importeras i efterhand kan ändra avräkningen för racet och, via
+// potten, alla senare race. Backa därför avräkningarna från det racet och
+// framåt och räkna om dem i racordning.
+async function resettleFrom(db, sessionKey) {
+  const settlements = db.settings.raceSettlements || {};
+  if (!settlements[sessionKey]) return;
+
+  const sessions = await loadSessions();
+  const startOf = (key) => {
+    const s = sessions.find((x) => String(x.session_key) === String(key));
+    return s ? new Date(s.date_start || s.session_start_utc).getTime() : Infinity;
+  };
+  const from = startOf(sessionKey);
+  const affected = Object.keys(settlements)
+    .filter((k) => startOf(k) >= from)
+    .sort((a, b) => startOf(a) - startOf(b));
+
+  for (const key of affected.slice().reverse()) {
+    db.settings.racePot = Math.max(
+      0,
+      (Number(db.settings.racePot) || 0) - (Number(settlements[key].potDelta) || 0)
+    );
+    delete settlements[key];
+  }
+  for (const key of affected) {
+    const results = await loadSessionResult(key);
+    if (results && results.length >= 3) settleRace(db, key, results);
+  }
+}
+
 app.get("/api/race/settlement/:sessionKey", async (req, res) => {
   const { sessionKey } = req.params;
   const db = readBetsFile();
@@ -2381,44 +2450,8 @@ app.get("/api/race/settlement/:sessionKey", async (req, res) => {
       });
     }
 
-    const top3 = results.slice(0, 3).map((r) => Number(r.driver_number));
-    const raceBets = db.raceBets.filter(
-      (b) =>
-        b.seasonYear === SEASON_YEAR &&
-        String(b.session_key) === String(sessionKey)
-    );
-
-    const winners = raceBets.filter(
-      (b) =>
-        Number(b.p1_driver_number) === top3[0] &&
-        Number(b.p2_driver_number) === top3[1] &&
-        Number(b.p3_driver_number) === top3[2]
-    );
-
-    const totalBets = raceBets.length;
-    const basePayoutTotal = totalBets * 50;
-    const payoutTotal =
-      winners.length > 0 ? basePayoutTotal + pot : basePayoutTotal;
-    const payoutPerWinner =
-      winners.length > 0 ? payoutTotal / winners.length : 0;
-
     if (!settlements[sessionKey]) {
-      const potDelta = winners.length === 0 ? payoutTotal : -pot;
-      db.settings.racePot = Math.max(
-        0,
-        (Number(db.settings.racePot) || 0) + potDelta
-      );
-      db.settings.raceSettlements[sessionKey] = {
-        sessionKey,
-        result: top3,
-        winners: winners.map((w) => w.userId),
-        totalBets,
-        payoutTotal,
-        payoutPerWinner,
-        potUsed: winners.length > 0 ? pot : 0,
-        potDelta,
-        settledAt: new Date().toISOString()
-      };
+      settleRace(db, sessionKey, results);
       writeBetsFile(db);
     }
 
@@ -2591,6 +2624,94 @@ app.get("/api/bets/race/:sessionKey/:userId", (req, res) => {
       String(b.session_key) === String(sessionKey)
   );
   res.json(bet || null);
+});
+
+// Import av bets som lagts någon annanstans (t.ex. WhatsApp-gruppen via n8n).
+// Kräver F1_IMPORT_TOKEN. Bettet måste vara lagt före planerad start och
+// skriver aldrig över ett befintligt bet.
+function hasValidImportToken(req) {
+  const expected = process.env.F1_IMPORT_TOKEN || "";
+  const given = String(req.get("X-Import-Token") || "");
+  if (!expected || given.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
+
+app.post("/api/bets/race/:sessionKey/:userId/import", async (req, res) => {
+  if (!process.env.F1_IMPORT_TOKEN) {
+    return res.status(503).json({ error: "Import är inte aktiverad" });
+  }
+  if (!hasValidImportToken(req)) {
+    return res.status(401).json({ error: "Ogiltig import-token" });
+  }
+
+  const { sessionKey, userId } = req.params;
+  const body = req.body || {};
+  const db = readBetsFile();
+
+  if (!db.users.some((u) => u.id === userId)) {
+    return res.status(404).json({ error: "Okänd användare" });
+  }
+
+  let session;
+  try {
+    const sessions = await loadSessions();
+    session = sessions.find((s) => String(s.session_key) === String(sessionKey));
+  } catch (err) {
+    console.error(err);
+    return res.status(503).json({ error: "Kunde inte hämta racekalendern, försök igen" });
+  }
+  if (!session || session.is_cancelled) {
+    return res.status(404).json({ error: "Okänt eller inställt race" });
+  }
+
+  const placedAt = new Date(body.placedAt);
+  const startsAt = new Date(session.date_start || session.session_start_utc);
+  if (Number.isNaN(placedAt.getTime())) {
+    return res.status(400).json({ error: "placedAt saknas eller är ogiltig" });
+  }
+  if (!(placedAt.getTime() < startsAt.getTime())) {
+    return res.status(403).json({ error: "Bettet lades efter planerad start" });
+  }
+
+  const picks = [body.p1_driver_number, body.p2_driver_number, body.p3_driver_number].map(Number);
+  if (picks.some((n) => !Number.isInteger(n) || n <= 0) || new Set(picks).size !== 3) {
+    return res.status(400).json({ error: "Tre olika förarnummer krävs" });
+  }
+
+  const existing = db.raceBets.find(
+    (b) =>
+      b.userId === userId &&
+      b.seasonYear === SEASON_YEAR &&
+      String(b.session_key) === String(sessionKey)
+  );
+  if (existing) {
+    return res.status(200).json({ status: "exists", bet: existing });
+  }
+
+  const now = new Date().toISOString();
+  const bet = {
+    userId,
+    seasonYear: SEASON_YEAR,
+    session_key: Number(sessionKey),
+    raceName: session.meeting_name || session.circuit_short_name || "",
+    p1_driver_number: picks[0],
+    p2_driver_number: picks[1],
+    p3_driver_number: picks[2],
+    source: String(body.source || "import"),
+    sourceMessageId: body.sourceMessageId ? String(body.sourceMessageId) : null,
+    placedAt: placedAt.toISOString(),
+    createdAt: now,
+    updatedAt: now
+  };
+  db.raceBets.push(bet);
+  try {
+    await resettleFrom(db, sessionKey);
+  } catch (err) {
+    console.error("Omräkning av avräkning misslyckades:", err);
+    return res.status(503).json({ error: "Kunde inte räkna om avräkningen, försök igen" });
+  }
+  writeBetsFile(db);
+  res.status(201).json({ status: "created", bet });
 });
 
 app.post("/api/bets/race/:sessionKey/:userId", async (req, res) => {

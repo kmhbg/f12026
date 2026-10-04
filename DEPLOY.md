@@ -125,3 +125,26 @@ sudo systemctl restart f1-betting
 ```
 
 Caddy behöver normalt inte startas om vid app-uppdateringar.
+
+
+---
+
+## Import av bets från WhatsApp (n8n)
+
+`POST /api/bets/race/:sessionKey/:userId/import` tar emot bets som lagts i
+WhatsApp-gruppen. Endpointen är avstängd tills `F1_IMPORT_TOKEN` är satt och
+kräver headern `X-Import-Token`. Bets efter planerad start avvisas och
+befintliga bets skrivs aldrig över. Avräkningen räknas om från det racet och
+framåt när ett bet importeras i efterhand.
+
+Sätt token via en systemd drop-in (aldrig i git):
+
+```bash
+sudo systemctl edit f1-betting
+# [Service]
+# Environment=F1_IMPORT_TOKEN=<slumpad, t.ex. openssl rand -hex 32>
+sudo systemctl restart f1-betting
+```
+
+Samma värde läggs i n8n-credentialen **F1 import-token** (header `X-Import-Token`).
+Se även `deploy/waha-worker/` för den separata WAHA-workern.
