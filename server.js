@@ -2,61 +2,68 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 const { createOpenF1MqttIngestor } = require("./lib/openf1-mqtt");
 const { loadOpenF1MqttEnv } = require("./lib/openf1-mqtt-config");
+const { openDatabase, scheduleBackups } = require("./lib/db");
+const { createStore } = require("./lib/store");
+const { createAuth } = require("./lib/auth");
+const { registerApiRoutes } = require("./routes/api");
+const { selectCachesToPrune } = require("./lib/cache-policy");
 const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const SEASON_YEAR = 2026;
+const SEASON_YEAR = Number(process.env.SEASON_YEAR) || new Date().getFullYear();
+const APP_NAME = process.env.APP_NAME || "F1tting";
+const STAKE_PER_BET = Number(process.env.STAKE_PER_BET) || 50;
+const PUBLIC_URL = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
+const SETUP_TOKEN = String(process.env.SETUP_TOKEN || "").trim();
+const APP_VERSION = process.env.APP_VERSION || require("./package.json").version;
 
-const dataDir = path.join(__dirname, "data");
+const dataDir = path.resolve(process.env.DATA_DIR || path.join(__dirname, "data"));
 const cacheRoot = path.resolve(process.env.CACHE_DIR || path.join(dataDir, "cache"));
 const sessionCacheDir = path.join(cacheRoot, "sessions");
-const betsFileName = process.env.BETS_FILE || "bets.json";
-const betsFile = path.join(dataDir, betsFileName);
-const defaultBetsFile = path.join(dataDir, "bets.json");
 
 function ensureCacheDirs() {
   fs.mkdirSync(sessionCacheDir, { recursive: true });
 }
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir);
-}
 try {
   ensureCacheDirs();
 } catch (err) {
   console.error(`[cache] Kunde inte skapa cache-katalog ${sessionCacheDir}:`, err.message);
 }
 
-if (!fs.existsSync(defaultBetsFile)) {
-  fs.writeFileSync(
-    defaultBetsFile,
-    JSON.stringify(
-      {
-        users: [
-          { id: "seb", name: "Sebastian" },
-          { id: "olle", name: "Olle" },
-          { id: "anna", name: "Anna" }
-        ],
-        seasonBets: [],
-        raceBets: [],
-        settings: {
-          seasonOverrideOpen: false,
-          racePot: 0,
-          raceSettlements: {}
-        }
-      },
-      null,
-      2
-    )
-  );
+const db = openDatabase(dataDir);
+const store = createStore(db);
+const auth = createAuth(store);
+scheduleBackups(db, dataDir);
+
+// Bakom en reverse proxy (Caddy, nginx) behövs detta för korrekt req.secure/req.ip.
+if (process.env.TRUST_PROXY) {
+  const value = process.env.TRUST_PROXY;
+  app.set("trust proxy", value === "true" ? true : Number.isNaN(Number(value)) ? value : Number(value));
 }
 
-app.use(cors());
+// CORS behövs bara för appar på annan origin (t.ex. Capacitor). Utan
+// CORS_ORIGINS tillåts bara samma origin.
+const corsOrigins = (process.env.CORS_ORIGINS || "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+if (corsOrigins.length) app.use(cors({ origin: corsOrigins, credentials: true }));
+
 app.use(express.json());
+app.use(auth.loadUser);
+app.use("/api", auth.requireJsonForWrites);
+
+// Allt under /api kräver inloggning utom inloggningen själv, hälsokontrollen
+// och importen (som har egen token).
+const PUBLIC_API_PATHS = [/^\/auth\//, /^\/health$/, /^\/config$/, /^\/bets\/race\/[^/]+\/[^/]+\/import$/];
+app.use("/api", (req, res, next) =>
+  PUBLIC_API_PATHS.some((re) => re.test(req.path)) ? next() : auth.requireUser(req, res, next)
+);
+
 app.use(express.static(path.join(__dirname, "public")));
 
 let cachedSessions = null;
@@ -72,8 +79,6 @@ let cachedStandingsAt = 0;
 let sessionsInFlight = null;
 let meetingsInFlight = null;
 let driversInFlight = null;
-let cachedRaceStandings = null;
-let cachedRaceStandingsAt = 0;
 let cachedLiveBundle = null;
 let cachedLiveBundleAt = 0;
 let cachedLiveSessionKey = null;
@@ -110,7 +115,6 @@ const SESSION_CAR_DATA_CHUNK_MS = 2 * 60 * 1000;
 const STANDINGS_TTL_MS = 15 * 60 * 1000;
 // Kalendern kan ändras under säsongen (inlagda/flyttade race), så den får inte cachas för evigt.
 const CALENDAR_TTL_MS = 60 * 60 * 1000;
-const RACE_STANDINGS_TTL_MS = 10 * 60 * 1000;
 const LIVE_CACHE_TTL_MS = 3000;
 const LIVE_ANALYSIS_TTL_MS = 8000;
 const REPLAY_FRAME_CACHE_TTL_MS = 2500;
@@ -118,7 +122,9 @@ const REPLAY_SESSION_DATA_TTL_MS = 30 * 60 * 1000;
 const OPENF1_MIN_INTERVAL_MS = 400;
 const CACHE_SYNC_INTERVAL_MS = Number(process.env.CACHE_SYNC_INTERVAL_MS) || 6 * 60 * 60 * 1000;
 const CACHE_SYNC_MAX_SESSIONS = Number(process.env.CACHE_SYNC_MAX_SESSIONS) || 0;
-const CACHE_PREWARM_RACE_COUNT = Number(process.env.CACHE_PREWARM_RACE_COUNT) || 3;
+// Antal senaste race vars replay-data hålls cachad (äldre rensas automatiskt).
+const CACHE_PREWARM_RACE_COUNT =
+  Number(process.env.CACHE_RACE_COUNT) || Number(process.env.CACHE_PREWARM_RACE_COUNT) || 2;
 const openF1MqttEnv = loadOpenF1MqttEnv(process.env);
 const OPENF1_USERNAME = openF1MqttEnv.accountUsername;
 const OPENF1_PASSWORD = openF1MqttEnv.accountPassword;
@@ -245,6 +251,7 @@ async function loadSessions() {
 
     cachedSessions = data;
     cachedSessionsAt = Date.now();
+    lastOpenF1SuccessAt = new Date().toISOString();
     return cachedSessions;
   })().catch((err) => {
     if (cachedSessions) {
@@ -502,110 +509,6 @@ async function loadSessionResult(sessionKey) {
   }
 }
 
-async function loadRaceStandings(db) {
-  const now = Date.now();
-  if (cachedRaceStandings && now - cachedRaceStandingsAt < RACE_STANDINGS_TTL_MS) {
-    return cachedRaceStandings;
-  }
-
-  const sessions = await loadSessions();
-  const nowDate = new Date();
-  const pastSessions = sessions.filter((s) => {
-    const rawDate = s.date_start || s.session_start_utc;
-    if (!rawDate) return false;
-    return new Date(rawDate) <= nowDate;
-  });
-
-  const sessionByKey = new Map(
-    pastSessions.map((s) => [String(s.session_key), s])
-  );
-
-  const raceResults = [];
-  for (const session of pastSessions) {
-    const sessionKey = session.session_key;
-    if (!sessionKey) continue;
-    const results = await loadSessionResult(sessionKey);
-    if (!results || results.length < 3) continue;
-    const top3 = results.slice(0, 3).map((r) => Number(r.driver_number));
-    raceResults.push({
-      sessionKey: String(sessionKey),
-      raceName: session.meeting_name || session.circuit_short_name || "Race",
-      date: session.date_start || session.session_start_utc || null,
-      resultTop3: top3
-    });
-  }
-
-  const pointsByUser = new Map();
-  const winsByUser = new Map();
-
-  raceResults.forEach((race) => {
-    const bets = db.raceBets.filter(
-      (b) =>
-        b.seasonYear === SEASON_YEAR &&
-        String(b.session_key) === String(race.sessionKey)
-    );
-    const winners = bets.filter(
-      (b) =>
-        Number(b.p1_driver_number) === race.resultTop3[0] &&
-        Number(b.p2_driver_number) === race.resultTop3[1] &&
-        Number(b.p3_driver_number) === race.resultTop3[2]
-    );
-
-    const winnerIds = winners.map((w) => w.userId);
-    winnerIds.forEach((userId) => {
-      pointsByUser.set(userId, (pointsByUser.get(userId) || 0) + 1);
-      if (!winsByUser.has(userId)) winsByUser.set(userId, []);
-      winsByUser.get(userId).push({
-        sessionKey: race.sessionKey,
-        raceName: race.raceName,
-        date: race.date
-      });
-    });
-
-    race.winners = winnerIds;
-    race.totalBets = bets.length;
-  });
-
-  const leaderboard = db.users
-    .map((u) => ({
-      userId: u.id,
-      name: u.name,
-      points: pointsByUser.get(u.id) || 0,
-      wins: winsByUser.get(u.id) || []
-    }))
-    .sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
-
-  cachedRaceStandings = {
-    updatedAt: Date.now(),
-    races: raceResults,
-    leaderboard
-  };
-  cachedRaceStandingsAt = Date.now();
-  return cachedRaceStandings;
-}
-
-function readBetsFile() {
-  const raw = fs.readFileSync(betsFile, "utf-8");
-  const data = JSON.parse(raw);
-  if (!data.settings) {
-    data.settings = { seasonOverrideOpen: false, racePot: 0, raceSettlements: {} };
-  }
-  if (typeof data.settings.seasonOverrideOpen !== "boolean") {
-    data.settings.seasonOverrideOpen = false;
-  }
-  if (typeof data.settings.racePot !== "number") {
-    data.settings.racePot = 0;
-  }
-  if (!data.settings.raceSettlements || typeof data.settings.raceSettlements !== "object") {
-    data.settings.raceSettlements = {};
-  }
-  return data;
-}
-
-function writeBetsFile(data) {
-  fs.writeFileSync(betsFile, JSON.stringify(data, null, 2), "utf-8");
-}
-
 function resolveSessionKeyParam(raw) {
   if (raw === undefined || raw === null || raw === "" || raw === "latest") {
     return "latest";
@@ -760,6 +663,11 @@ function readSessionCacheResource(sessionKey, resource) {
 function loadSessionCacheData(sessionKey) {
   const key = String(sessionKey);
   if (!isSessionCacheComplete(key)) return null;
+  try {
+    store.touchCache(key);
+  } catch {
+    // Användningstiden är bara en hint till rensningen.
+  }
   return {
     meta: readSessionCacheMeta(key),
     drivers: readSessionCacheResource(key, "drivers") || [],
@@ -1023,6 +931,7 @@ function writeSessionCache(sessionKey, payload) {
   Object.entries(resources).forEach(([name, data]) => {
     fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(data));
   });
+  const builtAt = new Date().toISOString();
   fs.writeFileSync(
     path.join(dir, "meta.json"),
     JSON.stringify(
@@ -1030,7 +939,7 @@ function writeSessionCache(sessionKey, payload) {
         version: SESSION_CACHE_VERSION,
         complete: true,
         sessionKey: Number(sessionKey),
-        builtAt: new Date().toISOString(),
+        builtAt,
         dateStart: payload.dateStart,
         dateEnd: payload.dateEnd,
         counts: {
@@ -1055,6 +964,11 @@ function writeSessionCache(sessionKey, payload) {
       2
     )
   );
+  try {
+    store.recordCache(sessionKey, directorySize(dir), builtAt);
+  } catch (err) {
+    console.error(`[cache] Kunde inte registrera cache för ${sessionKey}:`, err.message);
+  }
 }
 
 async function buildSessionCache(sessionKey, sessionHint = null) {
@@ -1367,11 +1281,85 @@ async function syncSessionCaches(options = {}) {
   return result;
 }
 
+function directorySize(dir) {
+  let total = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    total += entry.isDirectory() ? directorySize(full) : fs.statSync(full).size;
+  }
+  return total;
+}
+
+function listCachedSessionKeys() {
+  try {
+    return fs
+      .readdirSync(sessionCacheDir, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && /^\d+$/.test(d.name))
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
+}
+
+// Kataloger på disk som saknar rad i databasen (t.ex. byggda före migrering 002)
+// registreras med byggtiden från meta.json; rader utan katalog tas bort.
+function reconcileCacheEntries() {
+  const onDisk = new Set(listCachedSessionKeys());
+  const known = new Map(store.listCacheEntries().map((e) => [String(e.sessionKey), e]));
+  for (const key of onDisk) {
+    if (known.has(key)) continue;
+    const meta = readSessionCacheMeta(key);
+    store.recordCache(key, directorySize(sessionCachePath(key)), meta?.builtAt || new Date(0).toISOString());
+  }
+  for (const key of known.keys()) {
+    if (!onDisk.has(key)) store.deleteCacheEntry(key);
+  }
+  return store.listCacheEntries();
+}
+
+async function cacheKeepKeys() {
+  const latest = (await listLatestFinishedRaces(CACHE_PREWARM_RACE_COUNT)).map((s) => String(s.session_key));
+  if (CACHE_SYNC_MAX_SESSIONS > CACHE_PREWARM_RACE_COUNT) {
+    const extra = (await listFinishedSessionsForCacheSync()).slice(0, CACHE_SYNC_MAX_SESSIONS);
+    extra.forEach((s) => latest.push(String(s.session_key)));
+  }
+  return latest;
+}
+
+async function pruneSessionCaches() {
+  const entries = reconcileCacheEntries();
+  const latestRaceKeys = await cacheKeepKeys();
+  // Tom kalender betyder oftast att OpenF1 rate-limitar – rensa då inget,
+  // annars skulle även de senaste racen tas bort.
+  if (latestRaceKeys.length === 0) {
+    console.warn("[cache-prune] Hoppar över rensning: racekalendern är inte tillgänglig");
+    return { pruned: [], kept: [], skipped: "calendar-unavailable" };
+  }
+  const buildingKeys = [...sessionCacheBuildsInFlight.keys(), ...sessionCacheBuildProgress.keys()];
+  const toPrune = selectCachesToPrune({
+    cachedKeys: entries.map((e) => String(e.sessionKey)),
+    entries,
+    latestRaceKeys,
+    buildingKeys
+  });
+  for (const key of toPrune) {
+    fs.rmSync(sessionCachePath(key), { recursive: true, force: true });
+    store.deleteCacheEntry(key);
+    replaySessionDataCache.delete(key);
+    replayLocationsIndexCache.delete(key);
+    replayTeamRadioListCache.delete(key);
+    console.log(`[cache-prune] Rensade session ${key}`);
+  }
+  return { pruned: toPrune, kept: latestRaceKeys };
+}
+
 function startCacheSyncScheduler() {
   const run = () => {
-    prewarmRaceCaches().catch((err) => {
-      console.error("[cache-prewarm] Bakgrundsjobb misslyckades:", err.message);
-    });
+    prewarmRaceCaches()
+      .then(() => pruneSessionCaches())
+      .catch((err) => {
+        console.error("[cache-prewarm] Bakgrundsjobb misslyckades:", err.message);
+      });
   };
   run();
   setInterval(run, CACHE_SYNC_INTERVAL_MS);
@@ -2282,59 +2270,41 @@ async function loadLiveOpenF1Resource(resource, sessionKey, query = {}) {
   return { sessionKey: effectiveKey, status, rows };
 }
 
-app.get("/api/metadata", async (req, res) => {
+let lastOpenF1SuccessAt = null;
+
+app.get("/api/health", (req, res) => {
+  let dbOk = false;
   try {
-    const db = readBetsFile();
-    const [sessions, allSessionsRaw, meetings] = await Promise.all([
-      loadSessions(),
-      loadAllSessions(),
-      loadMeetings()
-    ]);
-    const { drivers, teams } = await loadDrivers();
-
-    const meetingByKey = new Map(meetings.map((m) => [m.meeting_key, m]));
-    const enrichSession = (s) => {
-      const meeting = meetingByKey.get(s.meeting_key);
-      return {
-        ...s,
-        meeting_name: meeting?.meeting_name || s.meeting_name,
-        circuit_image: meeting?.circuit_image || null
-      };
-    };
-
-    const enrichedSessions = sessions.map(enrichSession);
-    const allSessions = allSessionsRaw.map(enrichSession);
-
-    const seasonLocked = isSeasonLocked(sessions);
-
-    res.json({
-      seasonYear: SEASON_YEAR,
-      users: db.users,
-      sessions: enrichedSessions,
-      allSessions,
-      drivers,
-      teams,
-      seasonLocked,
-      seasonOverrideOpen: !!db.settings?.seasonOverrideOpen
-    });
+    db.prepare("SELECT 1").get();
+    dbOk = true;
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to load metadata" });
+    console.error("[health] DB-fel:", err.message);
   }
+  res.status(dbOk ? 200 : 503).json({
+    ok: dbOk,
+    version: APP_VERSION,
+    seasonYear: SEASON_YEAR,
+    uptimeSeconds: Math.round(process.uptime()),
+    races: Array.isArray(cachedSessions) ? cachedSessions.length : null,
+    lastOpenF1SuccessAt,
+    needsSetup: store.countAdmins() === 0
+  });
 });
 
-app.post("/api/settings/season-override", (req, res) => {
-  const { enabled } = req.body || {};
-  if (typeof enabled !== "boolean") {
-    return res.status(400).json({ error: "enabled must be a boolean" });
-  }
-
-  const db = readBetsFile();
-  db.settings = db.settings || { seasonOverrideOpen: false };
-  db.settings.seasonOverrideOpen = enabled;
-  writeBetsFile(db);
-
-  res.json({ seasonOverrideOpen: db.settings.seasonOverrideOpen });
+registerApiRoutes(app, {
+  store,
+  auth,
+  appName: APP_NAME,
+  seasonYear: SEASON_YEAR,
+  stake: STAKE_PER_BET,
+  publicUrl: PUBLIC_URL,
+  setupToken: SETUP_TOKEN,
+  loadSessions,
+  loadAllSessions,
+  loadMeetings,
+  loadDrivers,
+  loadSessionResult,
+  isSeasonLocked
 });
 
 app.get("/api/standings", async (req, res) => {
@@ -2348,428 +2318,6 @@ app.get("/api/standings", async (req, res) => {
     console.error(err);
     res.status(500).json({ error: "Failed to load standings" });
   }
-});
-
-app.get("/api/race/standings", async (req, res) => {
-  try {
-    const db = readBetsFile();
-    const standings = await loadRaceStandings(db);
-    res.json({
-      seasonYear: SEASON_YEAR,
-      updatedAt: standings.updatedAt,
-      races: standings.races,
-      leaderboard: standings.leaderboard
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to load race standings" });
-  }
-});
-
-function settleRace(db, sessionKey, results) {
-  const pot = Number(db.settings.racePot) || 0;
-  const top3 = results.slice(0, 3).map((r) => Number(r.driver_number));
-  const raceBets = db.raceBets.filter(
-    (b) =>
-      b.seasonYear === SEASON_YEAR &&
-      String(b.session_key) === String(sessionKey)
-  );
-
-  const winners = raceBets.filter(
-    (b) =>
-      Number(b.p1_driver_number) === top3[0] &&
-      Number(b.p2_driver_number) === top3[1] &&
-      Number(b.p3_driver_number) === top3[2]
-  );
-
-  // Vinnarna delar på racets insatser (50 kr per bet). Den samlade potten
-  // betalas inte ut tills vidare; utan vinnare går insatserna till potten.
-  const totalBets = raceBets.length;
-  const payoutTotal = totalBets * 50;
-  const payoutPerWinner =
-    winners.length > 0 ? payoutTotal / winners.length : 0;
-
-  const potDelta = winners.length === 0 ? payoutTotal : 0;
-  db.settings.racePot = Math.max(0, pot + potDelta);
-  db.settings.raceSettlements[sessionKey] = {
-    sessionKey: String(sessionKey),
-    result: top3,
-    winners: winners.map((w) => w.userId),
-    totalBets,
-    payoutTotal,
-    payoutPerWinner,
-    potUsed: 0,
-    potDelta,
-    settledAt: new Date().toISOString()
-  };
-}
-
-// Ett bet som importeras i efterhand kan ändra avräkningen för racet och, via
-// potten, alla senare race. Backa därför avräkningarna från det racet och
-// framåt och räkna om dem i racordning.
-async function resettleFrom(db, sessionKey) {
-  const settlements = db.settings.raceSettlements || {};
-  if (!settlements[sessionKey]) return;
-
-  const sessions = await loadSessions();
-  const startOf = (key) => {
-    const s = sessions.find((x) => String(x.session_key) === String(key));
-    return s ? new Date(s.date_start || s.session_start_utc).getTime() : Infinity;
-  };
-  const from = startOf(sessionKey);
-  const affected = Object.keys(settlements)
-    .filter((k) => startOf(k) >= from)
-    .sort((a, b) => startOf(a) - startOf(b));
-
-  for (const key of affected.slice().reverse()) {
-    db.settings.racePot = Math.max(
-      0,
-      (Number(db.settings.racePot) || 0) - (Number(settlements[key].potDelta) || 0)
-    );
-    delete settlements[key];
-  }
-  for (const key of affected) {
-    const results = await loadSessionResult(key);
-    if (results && results.length >= 3) settleRace(db, key, results);
-  }
-}
-
-app.get("/api/race/settlement/:sessionKey", async (req, res) => {
-  const { sessionKey } = req.params;
-  const db = readBetsFile();
-  const pot = Number(db.settings?.racePot) || 0;
-  const settlements = db.settings?.raceSettlements || {};
-
-  try {
-    const results = await loadSessionResult(sessionKey);
-    if (!results || results.length < 3) {
-      return res.json({
-        status: "pending",
-        sessionKey,
-        pot
-      });
-    }
-
-    if (!settlements[sessionKey]) {
-      settleRace(db, sessionKey, results);
-      writeBetsFile(db);
-    }
-
-    const settlement = db.settings.raceSettlements[sessionKey];
-    return res.json({
-      status: "settled",
-      sessionKey,
-      pot: db.settings.racePot,
-      settlement
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to settle race bets" });
-  }
-});
-
-app.get("/api/bets/season/:userId", (req, res) => {
-  const { userId } = req.params;
-  const db = readBetsFile();
-  const bet = db.seasonBets.find(
-    (b) => b.userId === userId && b.seasonYear === SEASON_YEAR
-  );
-  res.json(bet || null);
-});
-
-app.post("/api/bets/season/:userId", async (req, res) => {
-  const { userId } = req.params;
-  const body = req.body;
-  const db = readBetsFile();
-  const now = new Date().toISOString();
-  const seasonOverrideOpen = !!db.settings?.seasonOverrideOpen;
-
-  try {
-    const sessions = await loadSessions();
-    if (isSeasonLocked(sessions) && !seasonOverrideOpen) {
-      return res.status(400).json({
-        error: "Season bets are locked because the season has started.",
-        seasonLocked: true,
-        seasonOverrideOpen
-      });
-    }
-  } catch (err) {
-    console.error("Failed to evaluate season lock state:", err);
-  }
-
-  let bet = db.seasonBets.find(
-    (b) => b.userId === userId && b.seasonYear === SEASON_YEAR
-  );
-
-  if (!bet) {
-    bet = {
-      userId,
-      seasonYear: SEASON_YEAR,
-      driverPredictions: body.driverPredictions || [],
-      teamPredictions: body.teamPredictions || [],
-      createdAt: now,
-      updatedAt: now
-    };
-    db.seasonBets.push(bet);
-  } else {
-    bet.driverPredictions = body.driverPredictions || [];
-    bet.teamPredictions = body.teamPredictions || [];
-    bet.updatedAt = now;
-  }
-
-  writeBetsFile(db);
-  res.json(bet);
-});
-
-// Hantera användare (lägga till/ta bort bettare)
-app.post("/api/users", (req, res) => {
-  const { id, name } = req.body || {};
-  if (!name || typeof name !== "string" || !name.trim()) {
-    return res.status(400).json({ error: "Name is required" });
-  }
-
-  const db = readBetsFile();
-
-  let userId = (id || name).trim().toLowerCase();
-  userId = userId
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9_-]/g, "");
-
-  if (!userId) {
-    return res.status(400).json({ error: "Could not derive a valid id" });
-  }
-
-  if (db.users.some((u) => u.id === userId)) {
-    return res.status(409).json({ error: "User with this id already exists" });
-  }
-
-  const user = { id: userId, name: name.trim() };
-  db.users.push(user);
-  writeBetsFile(db);
-
-  res.status(201).json(user);
-});
-
-app.delete("/api/users/:userId", (req, res) => {
-  const { userId } = req.params;
-  const db = readBetsFile();
-
-  const existing = db.users.find((u) => u.id === userId);
-  if (!existing) {
-    return res.status(404).json({ error: "User not found" });
-  }
-
-  db.users = db.users.filter((u) => u.id !== userId);
-  db.seasonBets = db.seasonBets.filter((b) => b.userId !== userId);
-  db.raceBets = db.raceBets.filter((b) => b.userId !== userId);
-
-  writeBetsFile(db);
-  res.json({ ok: true });
-});
-
-// Sammanställning av alla bets (med dolda racebett före racestart)
-app.get("/api/bets/summary", async (req, res) => {
-  const viewerId = req.query.userId;
-
-  try {
-    const db = readBetsFile();
-    const sessions = await loadSessions();
-
-    const sessionsByKey = new Map(
-      sessions.map((s) => [String(s.session_key), s])
-    );
-
-    const now = new Date();
-
-    const raceBets = db.raceBets.map((bet) => {
-      const session = sessionsByKey.get(String(bet.session_key));
-      const rawDate = session?.date_start || session?.session_start_utc;
-      const raceStart = rawDate ? new Date(rawDate) : null;
-      const raceStarted = raceStart ? now >= raceStart : false;
-
-      if (!viewerId || viewerId === bet.userId || raceStarted) {
-        return { ...bet, hidden: false };
-      }
-
-      return {
-        ...bet,
-        p1_driver_number: null,
-        p2_driver_number: null,
-        p3_driver_number: null,
-        hidden: true
-      };
-    });
-
-    res.json({
-      seasonYear: SEASON_YEAR,
-      users: db.users,
-      seasonBets: db.seasonBets,
-      raceBets
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to build summary" });
-  }
-});
-
-app.get("/api/bets/race/:sessionKey/:userId", (req, res) => {
-  const { sessionKey, userId } = req.params;
-  const db = readBetsFile();
-  const bet = db.raceBets.find(
-    (b) =>
-      b.userId === userId &&
-      b.seasonYear === SEASON_YEAR &&
-      String(b.session_key) === String(sessionKey)
-  );
-  res.json(bet || null);
-});
-
-// Import av bets som lagts någon annanstans (t.ex. WhatsApp-gruppen via n8n).
-// Kräver F1_IMPORT_TOKEN. Bettet måste vara lagt före planerad start och
-// skriver aldrig över ett befintligt bet.
-function hasValidImportToken(req) {
-  const expected = process.env.F1_IMPORT_TOKEN || "";
-  const given = String(req.get("X-Import-Token") || "");
-  if (!expected || given.length !== expected.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
-}
-
-app.post("/api/bets/race/:sessionKey/:userId/import", async (req, res) => {
-  if (!process.env.F1_IMPORT_TOKEN) {
-    return res.status(503).json({ error: "Import är inte aktiverad" });
-  }
-  if (!hasValidImportToken(req)) {
-    return res.status(401).json({ error: "Ogiltig import-token" });
-  }
-
-  const { sessionKey, userId } = req.params;
-  const body = req.body || {};
-  const db = readBetsFile();
-
-  if (!db.users.some((u) => u.id === userId)) {
-    return res.status(404).json({ error: "Okänd användare" });
-  }
-
-  let session;
-  try {
-    const sessions = await loadSessions();
-    session = sessions.find((s) => String(s.session_key) === String(sessionKey));
-  } catch (err) {
-    console.error(err);
-    return res.status(503).json({ error: "Kunde inte hämta racekalendern, försök igen" });
-  }
-  if (!session || session.is_cancelled) {
-    return res.status(404).json({ error: "Okänt eller inställt race" });
-  }
-
-  const placedAt = new Date(body.placedAt);
-  const startsAt = new Date(session.date_start || session.session_start_utc);
-  if (Number.isNaN(placedAt.getTime())) {
-    return res.status(400).json({ error: "placedAt saknas eller är ogiltig" });
-  }
-  // allowLate används bara när ni uttryckligen godkänt ett sent bet i efterhand.
-  const lateOverride = body.allowLate === true && !(placedAt.getTime() < startsAt.getTime());
-  if (!(placedAt.getTime() < startsAt.getTime()) && !lateOverride) {
-    return res.status(403).json({ error: "Bettet lades efter planerad start" });
-  }
-
-  const picks = [body.p1_driver_number, body.p2_driver_number, body.p3_driver_number].map(Number);
-  if (picks.some((n) => !Number.isInteger(n) || n <= 0) || new Set(picks).size !== 3) {
-    return res.status(400).json({ error: "Tre olika förarnummer krävs" });
-  }
-
-  const existing = db.raceBets.find(
-    (b) =>
-      b.userId === userId &&
-      b.seasonYear === SEASON_YEAR &&
-      String(b.session_key) === String(sessionKey)
-  );
-  if (existing) {
-    return res.status(200).json({ status: "exists", bet: existing });
-  }
-
-  const now = new Date().toISOString();
-  const bet = {
-    userId,
-    seasonYear: SEASON_YEAR,
-    session_key: Number(sessionKey),
-    raceName: session.meeting_name || session.circuit_short_name || "",
-    p1_driver_number: picks[0],
-    p2_driver_number: picks[1],
-    p3_driver_number: picks[2],
-    source: String(body.source || "import"),
-    sourceMessageId: body.sourceMessageId ? String(body.sourceMessageId) : null,
-    placedAt: placedAt.toISOString(),
-    ...(lateOverride ? { lateOverride: true } : {}),
-    createdAt: now,
-    updatedAt: now
-  };
-  db.raceBets.push(bet);
-  try {
-    await resettleFrom(db, sessionKey);
-  } catch (err) {
-    console.error("Omräkning av avräkning misslyckades:", err);
-    return res.status(503).json({ error: "Kunde inte räkna om avräkningen, försök igen" });
-  }
-  writeBetsFile(db);
-  res.status(201).json({ status: "created", bet });
-});
-
-app.post("/api/bets/race/:sessionKey/:userId", async (req, res) => {
-  const { sessionKey, userId } = req.params;
-  const body = req.body;
-
-  let session;
-  try {
-    const sessions = await loadSessions();
-    session = sessions.find((s) => String(s.session_key) === String(sessionKey));
-  } catch (err) {
-    console.error(err);
-    return res.status(503).json({ error: "Kunde inte hämta racekalendern, försök igen" });
-  }
-  if (!session) {
-    return res.status(404).json({ error: "Okänt race" });
-  }
-  const startsAt = new Date(session.date_start || session.session_start_utc);
-  if (session.is_cancelled || !(Date.now() < startsAt.getTime())) {
-    return res.status(403).json({ error: "Racet har redan startat – bettet är låst" });
-  }
-
-  const db = readBetsFile();
-  const now = new Date().toISOString();
-
-  let bet = db.raceBets.find(
-    (b) =>
-      b.userId === userId &&
-      b.seasonYear === SEASON_YEAR &&
-      String(b.session_key) === String(sessionKey)
-  );
-
-  if (!bet) {
-    bet = {
-      userId,
-      seasonYear: SEASON_YEAR,
-      session_key: Number(sessionKey),
-      raceName: body.raceName || "",
-      p1_driver_number: body.p1_driver_number || null,
-      p2_driver_number: body.p2_driver_number || null,
-      p3_driver_number: body.p3_driver_number || null,
-      createdAt: now,
-      updatedAt: now
-    };
-    db.raceBets.push(bet);
-  } else {
-    bet.p1_driver_number = body.p1_driver_number || null;
-    bet.p2_driver_number = body.p2_driver_number || null;
-    bet.p3_driver_number = body.p3_driver_number || null;
-    bet.raceName = body.raceName || bet.raceName;
-    bet.updatedAt = now;
-  }
-
-  writeBetsFile(db);
-  res.json(bet);
 });
 
 app.get("/api/live", async (req, res) => {
@@ -2879,6 +2427,49 @@ app.get("/api/live/replay/timeline", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to load replay timeline" });
+  }
+});
+
+// Admin: vilka sessioner som har replay-data cachad, pinna och rensa.
+app.get("/api/admin/cache", auth.requireAdmin, async (req, res) => {
+  try {
+    const entries = reconcileCacheEntries();
+    const [sessions, keepKeys] = await Promise.all([loadAllSessions().catch(() => []), cacheKeepKeys().catch(() => [])]);
+    const byKey = new Map(sessions.map((s) => [String(s.session_key), s]));
+    const keep = new Set(keepKeys);
+    res.json({
+      raceCount: CACHE_PREWARM_RACE_COUNT,
+      entries: entries.map((e) => {
+        const s = byKey.get(String(e.sessionKey));
+        return {
+          ...e,
+          label: s ? `${s.location || s.circuit_short_name || "?"} – ${s.session_name || "Session"}` : `Session ${e.sessionKey}`,
+          date: s?.date_start || null,
+          latest: keep.has(String(e.sessionKey))
+        };
+      })
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Kunde inte läsa cachen" });
+  }
+});
+
+app.post("/api/admin/cache/:sessionKey/pin", auth.requireAdmin, (req, res) => {
+  const pinned = req.body?.pinned === true;
+  if (!store.setCachePinned(req.params.sessionKey, pinned)) return res.status(404).json({ error: "Sessionen är inte cachad" });
+  store.audit(req.user.id, "cache-pin", { sessionKey: Number(req.params.sessionKey), pinned });
+  res.json({ ok: true, pinned });
+});
+
+app.post("/api/admin/cache/prune", auth.requireAdmin, async (req, res) => {
+  try {
+    const result = await pruneSessionCaches();
+    store.audit(req.user.id, "cache-prune", { pruned: result.pruned.length });
+    res.json(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Rensningen misslyckades" });
   }
 });
 
@@ -3111,9 +2702,7 @@ app.get("/api/live/openf1/:resource", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Cache directory: ${sessionCacheDir}`);
-  if (betsFileName !== "bets.json") {
-    console.log(`Using bets file: ${betsFileName}`);
-  }
+  console.log(`Data directory: ${dataDir}`);
   startCacheSyncScheduler();
   openF1Mqtt.start();
 });

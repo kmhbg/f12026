@@ -1,8 +1,5 @@
 node_modules
-data/cache/*
-!data/cache/sessions/
-!data/cache/sessions/**
-!data/cache/.gitkeep
+data
 .git
 .github
 .azure
@@ -12,6 +9,7 @@ capacitor.config.json
 *.md
 docs
 deploy
+test
 .DS_Store
 .env
 .env.*

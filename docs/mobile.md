@@ -23,26 +23,26 @@ En **native iOS-app** finns i mappen **`f1_bet/`**. Den använder samma API som 
 3. Build & Run (⌘R).
 
 ### Konfigurera server
-- I appen: **Inställningar** → ange serveradress (t.ex. `https://betsel.fortiddns.com` eller `http://localhost:3000` för utveckling).
+- I appen: **Inställningar** → ange serveradress (t.ex. `https://f1.example.com` eller `http://localhost:3000` för utveckling).
 - Servern måste ha **CORS** aktiverat (redan gjort i `server.js` med `cors()`), så att appen får anropa API:et.
 
-### Felsök: /api/metadata fungerar på localhost men inte på betsel.fortiddns.com
-Om du når `http://localhost:3000/api/metadata` men inte `https://betsel.fortiddns.com/api/metadata` betyder det att den **publika servern** inte skickar trafik till Node-appen. Kontrollera på **servern** som betsel.fortiddns.com pekar på:
+### Felsök: /api/metadata fungerar på localhost men inte på f1.example.com
+Om du når `http://localhost:3000/api/metadata` men inte `https://f1.example.com/api/metadata` betyder det att den **publika servern** inte skickar trafik till Node-appen. Kontrollera på **servern** som f1.example.com pekar på:
 
 1. **Kör Node-appen**  
    `systemctl status f1-betting` (eller vad tjänsten heter). Om den inte kör: starta med `deploy/deploy.sh` eller `node server.js` i projektmappen. Appen måste lyssna på port 3000.
 
 2. **Port 80/443 måste gå till Node**  
-   När någon anropar `betsel.fortiddns.com/api/metadata` måste webbservern (Caddy, nginx, Apache) **skicka vidare** till `localhost:3000`. Om du bara har en vanlig webbhotell/statisk server utan reverse proxy kommer `/api/*` inte att nå Node.
+   När någon anropar `f1.example.com/api/metadata` måste webbservern (Caddy, nginx, Apache) **skicka vidare** till `localhost:3000`. Om du bara har en vanlig webbhotell/statisk server utan reverse proxy kommer `/api/*` inte att nå Node.
 
 3. **Caddy med din domän**  
    Om du använder Caddy: lägg in ett block för din domän i Caddyfile och skicka all trafik till Node:
    ```caddy
-   betsel.fortiddns.com {
+   f1.example.com {
        reverse_proxy localhost:3000
    }
    ```
-   Kör sedan `sudo systemctl reload caddy`. Se även `deploy/Caddyfile` och `deploy/Caddyfile.betsel.example`.
+   Kör sedan `sudo systemctl reload caddy`. Se även `deploy/Caddyfile` och `deploy/Caddyfile.example`.
 
 4. **Nginx**  
    Om du använder nginx behöver du en `location /` (eller `location /api`) som `proxy_pass http://127.0.0.1:3000;`.
@@ -109,7 +109,7 @@ I EU tillåter Apple från iOS 17.4+ installation av appar utanför App Store (t
 ### 3. AltStore / AltStore PAL (sideload utan egen webbdistribution)
 
 - **AltStore PAL** (endast **EU**): Kräver att du har **betalt Apple Developer-konto** och notariserar appen. Vännerna installerar [AltStore PAL](https://altstore.io/) från altstore.io. Se [AltStore PAL – Distribute](https://faq.altstore.io/developers/distribute-with-altstore-pal).
-- **AltStore (klassisk, utan Developer-konto)**: Du behöver **inte** betala. Bygg en .ipa med **gratis Apple ID** (Development-export eller osignerad .ipa) och lägg den på servern. Användare installerar [AltStore](https://altstore.io/) via AltServer (Mac/PC), lägger till din "source" (t.ex. `https://betsel.fortiddns.com/altstore-source.json`) och installerar appen – AltStore signerar med deras eget Apple ID. Appen förnyas var 7:e dag. **Fullständig guide:** [docs/altstore-utan-developer-konto.md](altstore-utan-developer-konto.md).
+- **AltStore (klassisk, utan Developer-konto)**: Du behöver **inte** betala. Bygg en .ipa med **gratis Apple ID** (Development-export eller osignerad .ipa) och lägg den på servern. Användare installerar [AltStore](https://altstore.io/) via AltServer (Mac/PC), lägger till din "source" (t.ex. `https://f1.example.com/altstore-source.json`) och installerar appen – AltStore signerar med deras eget Apple ID. Appen förnyas var 7:e dag. **Fullständig guide:** [docs/altstore-utan-developer-konto.md](altstore-utan-developer-konto.md).
 
 **Bygga en IPA utan Developer-konto:** Se **[altstore-utan-developer-konto.md](altstore-utan-developer-konto.md)** för steg-för-steg (Development-export eller osignerad .ipa). Med betalt konto: **Product → Archive → Distribute App** → Ad Hoc eller Development.
 
@@ -125,14 +125,14 @@ I EU tillåter Apple från iOS 17.4+ installation av appar utanför App Store (t
 ---
 
 ## iOS (gratis) – PWA
-1. Öppna `https://betsel.fortiddns.com` i Safari.
+1. Öppna `https://f1.example.com` i Safari.
 2. Tryck på delningsikonen → "Lägg till på hemskärmen".
 3. Appen installeras som PWA (ingen App Store).
 
 ---
 
 ## Android – APK (nedladdningsbar från sidan)
-Appen byggs med Capacitor och laddar sedan sidan från `https://betsel.fortiddns.com` (konfigurerat i `capacitor.config.json`).
+Appen byggs med Capacitor och laddar sedan sidan från `https://f1.example.com` (konfigurerat i `capacitor.config.json`).
 
 ### Första gången (på en dator med Node, **Java 21** (rekommenderat) eller Java 17 och Android Studio / Android SDK):
 ```bash

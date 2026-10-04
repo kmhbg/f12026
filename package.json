@@ -1,10 +1,13 @@
 {
   "name": "f1-betting-2026",
   "version": "1.0.0",
-  "description": "Enkel F1-bettingsite för kompisgäng, säsongen 2026.",
+  "description": "Självhostad F1-betting för kompisgäng: podiumbets per race, säsongsbets och live-tidtagning.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node --test test/",
+    "migrate:json": "node scripts/migrate-json-to-sqlite.js",
+    "admin": "node scripts/admin.js",
     "cap:sync": "cap sync",
     "build:apk": "sh scripts/build-apk.sh",
     "build:apk:release": "cap sync && cd android && ./gradlew assembleRelease && cp app/build/outputs/apk/release/app-release.apk ../public/downloads/f1tting.apk && echo 'APK (release) kopierad till public/downloads/f1tting.apk'"
@@ -12,6 +15,7 @@
   "dependencies": {
     "@capacitor/android": "^8.2.0",
     "@capacitor/core": "^8.2.0",
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
     "express": "^4.19.0",
     "mqtt": "^5.15.1",
@@ -19,5 +23,8 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.2.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

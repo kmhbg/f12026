@@ -37,9 +37,21 @@ async function loadMetadata() {
   state.drivers = data.drivers;
   state.teams = data.teams;
 
+  state.currentUser = data.currentUser;
+  if (state.currentUser?.role !== "admin") {
+    state.users = state.users.filter((u) => u.id === state.currentUser?.id);
+    $("user-section").classList.add("hidden");
+  }
+
   populateUserSelect();
   populateRaceSelect();
   updateSeasonLockInfo();
+
+  if (state.currentUser) {
+    const select = $("user-select");
+    select.value = state.currentUser.id;
+    select.dispatchEvent(new Event("change"));
+  }
 }
 
 function populateUserSelect() {

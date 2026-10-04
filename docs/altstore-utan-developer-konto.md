@@ -43,13 +43,13 @@ AltStore kan signera denna .ipa med användarens Apple ID vid installation.
 Projektet innehåller redan en **AltStore source**-fil som gör att användare kan lägga till din app i AltStore:
 
 - **Fil:** `public/altstore-source.json`
-- **URL:** `https://betsel.fortiddns.com/altstore-source.json`
+- **URL:** `https://f1.example.com/altstore-source.json`
 
 När du har lagt **f1_bet.ipa** i **public/downloads/** ska du uppdatera source-filen:
 
 1. Öppna **public/altstore-source.json**.
 2. Uppdatera **size** i `versions[0]` till filstorleken i byte (t.ex. `ls -l public/downloads/f1_bet.ipa` eller på Mac: **Get Info** på filen).
-3. Sätt **downloadURL** till din publika URL, t.ex. `https://betsel.fortiddns.com/downloads/f1_bet.ipa`.
+3. Sätt **downloadURL** till din publika URL, t.ex. `https://f1.example.com/downloads/f1_bet.ipa`.
 4. Justera **version** och **date** om du bygger en ny version senare.
 
 ---
