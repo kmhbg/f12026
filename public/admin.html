@@ -12,7 +12,7 @@
     <title>F1 Betting 2026 – Admin</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body data-require-admin="true">
     <header class="site-header">
       <div class="header-top">
         <div class="header-top-inner">
@@ -60,13 +60,15 @@
         </div>
 
         <div class="section-block">
-          <h3>Ta bort befintlig bettare</h3>
+          <h3>Befintlig bettare</h3>
           <label for="admin-user-select">Välj bettare:</label>
           <select id="admin-user-select">
             <option value="">-- Välj --</option>
           </select>
+          <button id="admin-invite-user-btn" type="button">Ny inloggningslänk</button>
           <button id="admin-delete-user-btn">Ta bort</button>
         </div>
+        <div id="admin-invite-link" class="section-block"></div>
 
         <div class="section-block">
           <h3>Årsbett – tillfällig öppning</h3>
@@ -162,6 +164,7 @@
       </div>
     </footer>
 
+    <script src="auth.js"></script>
     <script src="admin.js"></script>
   </body>
 </html>

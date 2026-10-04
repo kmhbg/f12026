@@ -1,25 +1,28 @@
-# Azure Container Apps kräver linux/amd64. På Apple Silicon:
-#   docker build --platform linux/amd64 -t <acr>.azurecr.io/f12026:test .
-FROM node:20-alpine
+# F1 Betting – självhostad. Data (SQLite, backuper, OpenF1-cache) ligger på
+# volymen /data så att den överlever uppgraderingar av containern.
+FROM node:22-bookworm-slim
 
 WORKDIR /app
+ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY server.js ./
 COPY lib ./lib
+COPY routes ./routes
+COPY migrations ./migrations
+COPY scripts ./scripts
 COPY public ./public
-COPY data ./data
 
-# Cache ska ligga på volym (/app/data/cache), men katalogen måste vara skrivbar av node.
-RUN mkdir -p /app/data/cache/sessions \
-  && chown -R node:node /app/data
+RUN mkdir -p /data && chown node:node /data
+ENV DATA_DIR=/data
+VOLUME ["/data"]
 
-ENV NODE_ENV=production
-ENV CACHE_DIR=/app/data/cache
 EXPOSE 3000
-
 USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]

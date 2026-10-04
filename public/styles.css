@@ -1872,3 +1872,33 @@ body.team-radio-modal-open {
     transform: none;
   }
 }
+
+/* Inloggning (v2) */
+.header-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.header-user-name {
+  font-weight: 600;
+}
+.header-logout {
+  cursor: pointer;
+  font: inherit;
+}
+.auth-box {
+  max-width: 420px;
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.auth-form button {
+  margin-top: 0.75rem;
+}
+.invite-link {
+  word-break: break-all;
+  user-select: all;
+}

@@ -109,17 +109,49 @@ async function adminAddUser() {
     }
 
     const user = await res.json();
-    adminState.users.push(user);
+    adminState.users.push({ id: user.id, name: user.name });
     populateUserSelects();
     nameInput.value = "";
-    statusEl.textContent = "Användare tillagd.";
-    setTimeout(() => {
-      statusEl.textContent = "";
-    }, 3000);
+    showInviteLink(user.name, user.inviteUrl);
+    statusEl.textContent = `Användare tillagd. Skicka länken nedan till ${user.name}.`;
   } catch (err) {
     console.error(err);
     statusEl.textContent = "Ett fel uppstod vid skapande av användare.";
   }
+}
+
+function showInviteLink(name, url) {
+  const box = $("admin-invite-link");
+  box.innerHTML = "";
+  const label = document.createElement("p");
+  label.className = "info";
+  label.textContent = `Inloggningslänk för ${name} (gäller i 7 dagar, kan bara användas en gång):`;
+  const link = document.createElement("code");
+  link.className = "invite-link";
+  link.textContent = url;
+  box.append(label, link);
+}
+
+async function adminNewInvite() {
+  const statusEl = $("admin-user-status");
+  const userId = $("admin-user-select").value;
+  if (!userId) {
+    statusEl.textContent = "Välj först vilken bettare som ska få en ny länk.";
+    return;
+  }
+  const res = await fetch(`${API_BASE}/users/${userId}/invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}"
+  });
+  if (!res.ok) {
+    statusEl.textContent = "Kunde inte skapa ny länk.";
+    return;
+  }
+  const { inviteUrl } = await res.json();
+  const user = adminState.users.find((u) => u.id === userId);
+  showInviteLink(user ? user.name : userId, inviteUrl);
+  statusEl.textContent = "Ny länk skapad. Den gamla slutar gälla.";
 }
 
 async function adminDeleteUser() {
@@ -521,6 +553,7 @@ function adminShowRaceSummary() {
 function setupAdminListeners() {
   $("admin-add-user-btn").addEventListener("click", adminAddUser);
   $("admin-delete-user-btn").addEventListener("click", adminDeleteUser);
+  $("admin-invite-user-btn").addEventListener("click", adminNewInvite);
   $("admin-load-summary-btn").addEventListener("click", loadSummary);
   $("admin-show-race-btn").addEventListener("click", adminShowRaceSummary);
   const seasonOverrideBtn = $("admin-season-override-btn");

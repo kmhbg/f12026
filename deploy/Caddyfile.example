@@ -1,0 +1,5 @@
+# Exempel: Caddy framför appen med automatisk HTTPS.
+# Sätt TRUST_PROXY=true i .env så att inloggningscookien markeras Secure.
+f1.example.com {
+	reverse_proxy localhost:3000
+}

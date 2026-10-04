@@ -4,3 +4,7 @@ data/cache/*
 public/downloads/*.apk
 public/downloads/*.ipa
 node_modules/
+
+# v2: all data ligger i DATA_DIR (standard ./data)
+data/
+.env

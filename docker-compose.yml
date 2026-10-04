@@ -1,18 +1,13 @@
-# Homelab / proxmox2 – kör bredvid systemd-prod eller som alternativ deploy.
-# Prod (f1.palsk.com): systemd via deploy/update-production.sh med data/cache på värddisk.
-# Docker: bind-mounta cache och bets så data överlever omstart.
+# Snabbstart: cp .env.example .env && docker compose up -d
+# Öppna sedan http://<din-server>:3000 och skapa admin-kontot.
 services:
-  f12026:
+  f1-betting:
     build: .
-    ports:
-      - "3000:3000"
+    env_file: .env
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      CACHE_DIR: /app/data/cache
-      CACHE_SYNC_INTERVAL_MS: "21600000"
-      # OpenF1 MQTT – sätt via .env (ej i git): OPENF1_USERNAME, OPENF1_PASSWORD
+      APP_VERSION: ${APP_VERSION:-dev}
+    ports:
+      - "${PORT:-3000}:3000"
     volumes:
-      - ./data/cache:/app/data/cache
-      - ./data/bets.json:/app/data/bets.json
+      - ./data:/data
     restart: unless-stopped
