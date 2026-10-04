@@ -134,7 +134,8 @@ Caddy behöver normalt inte startas om vid app-uppdateringar.
 `POST /api/bets/race/:sessionKey/:userId/import` tar emot bets som lagts i
 WhatsApp-gruppen. Endpointen är avstängd tills `F1_IMPORT_TOKEN` är satt och
 kräver headern `X-Import-Token`. Bets efter planerad start avvisas och
-befintliga bets skrivs aldrig över. Avräkningen räknas om från det racet och
+befintliga bets skrivs aldrig över. Med `"allowLate": true` i bodyn
+godkänns ett sent bet ändå och markeras med `lateOverride: true`. Avräkningen räknas om från det racet och
 framåt när ett bet importeras i efterhand.
 
 Sätt token via en systemd drop-in (aldrig i git):

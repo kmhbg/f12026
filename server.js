@@ -2669,7 +2669,9 @@ app.post("/api/bets/race/:sessionKey/:userId/import", async (req, res) => {
   if (Number.isNaN(placedAt.getTime())) {
     return res.status(400).json({ error: "placedAt saknas eller är ogiltig" });
   }
-  if (!(placedAt.getTime() < startsAt.getTime())) {
+  // allowLate används bara när ni uttryckligen godkänt ett sent bet i efterhand.
+  const lateOverride = body.allowLate === true && !(placedAt.getTime() < startsAt.getTime());
+  if (!(placedAt.getTime() < startsAt.getTime()) && !lateOverride) {
     return res.status(403).json({ error: "Bettet lades efter planerad start" });
   }
 
@@ -2700,6 +2702,7 @@ app.post("/api/bets/race/:sessionKey/:userId/import", async (req, res) => {
     source: String(body.source || "import"),
     sourceMessageId: body.sourceMessageId ? String(body.sourceMessageId) : null,
     placedAt: placedAt.toISOString(),
+    ...(lateOverride ? { lateOverride: true } : {}),
     createdAt: now,
     updatedAt: now
   };
