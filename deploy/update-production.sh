@@ -31,7 +31,7 @@ git checkout main
 git reset --hard origin/main
 
 if [ -f "$BACKUP_FILE" ]; then
-  cp "$BACKUP_FILE" data/bets.json
+  cp -p "$BACKUP_FILE" data/bets.json
   echo "Återställde data/bets.json från backup"
 fi
 
@@ -43,6 +43,12 @@ if command -v chown &>/dev/null && id www-data &>/dev/null; then
 fi
 
 npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+
+# git och npm körs som root – ge tillbaka trädet till tjänstens användare
+# (annars kan www-data inte skriva data/bets.json och nya bets sparas inte)
+if id www-data &>/dev/null; then
+  chown -R www-data:www-data "$APP_DIR"
+fi
 
 if systemctl is-active --quiet "$SERVICE_NAME"; then
   sudo systemctl restart "$SERVICE_NAME"
