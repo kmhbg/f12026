@@ -59,7 +59,9 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 let cachedSessions = null;
+let cachedSessionsAt = 0;
 let cachedMeetings = null;
+let cachedMeetingsAt = 0;
 let cachedDrivers = null;
 let cachedTeams = null;
 let cachedDriverStandings = null;
@@ -77,6 +79,7 @@ let cachedLiveAnalysis = null;
 let cachedLiveAnalysisAt = 0;
 let cachedLiveAnalysisKey = null;
 let cachedAllSessions = null;
+let cachedAllSessionsAt = 0;
 let allSessionsInFlight = null;
 const replayFrameCache = new Map();
 const replaySessionDataCache = new Map();
@@ -103,6 +106,8 @@ const SESSION_CAR_DATA_SAMPLE_MS = 1000;
 const SESSION_CAR_DATA_CHUNK_MS = 2 * 60 * 1000;
 
 const STANDINGS_TTL_MS = 15 * 60 * 1000;
+// Kalendern kan ändras under säsongen (inlagda/flyttade race), så den får inte cachas för evigt.
+const CALENDAR_TTL_MS = 60 * 60 * 1000;
 const RACE_STANDINGS_TTL_MS = 10 * 60 * 1000;
 const LIVE_CACHE_TTL_MS = 3000;
 const LIVE_ANALYSIS_TTL_MS = 8000;
@@ -222,7 +227,7 @@ async function getLatestRaceSessionKey() {
 }
 
 async function loadSessions() {
-  if (cachedSessions) return cachedSessions;
+  if (cachedSessions && Date.now() - cachedSessionsAt < CALENDAR_TTL_MS) return cachedSessions;
   if (sessionsInFlight) return sessionsInFlight;
   // Hämta alla races för säsongen
   const url = `https://api.openf1.org/v1/sessions?year=${SEASON_YEAR}&session_name=Race`;
@@ -237,8 +242,15 @@ async function loadSessions() {
     }
 
     cachedSessions = data;
+    cachedSessionsAt = Date.now();
     return cachedSessions;
-  })().finally(() => {
+  })().catch((err) => {
+    if (cachedSessions) {
+      console.error("OpenF1 calendar refresh failed, using stale cache:", err.message);
+      return cachedSessions;
+    }
+    throw err;
+  }).finally(() => {
     sessionsInFlight = null;
   });
 
@@ -246,7 +258,7 @@ async function loadSessions() {
 }
 
 async function loadAllSessions() {
-  if (cachedAllSessions) return cachedAllSessions;
+  if (cachedAllSessions && Date.now() - cachedAllSessionsAt < CALENDAR_TTL_MS) return cachedAllSessions;
   if (allSessionsInFlight) return allSessionsInFlight;
 
   const url = `https://api.openf1.org/v1/sessions?year=${SEASON_YEAR}`;
@@ -258,8 +270,15 @@ async function loadAllSessions() {
       return cachedAllSessions || [];
     }
     cachedAllSessions = data;
+    cachedAllSessionsAt = Date.now();
     return cachedAllSessions;
-  })().finally(() => {
+  })().catch((err) => {
+    if (cachedAllSessions) {
+      console.error("OpenF1 calendar refresh failed, using stale cache:", err.message);
+      return cachedAllSessions;
+    }
+    throw err;
+  }).finally(() => {
     allSessionsInFlight = null;
   });
 
@@ -286,7 +305,7 @@ function isSeasonLocked(sessions) {
 }
 
 async function loadMeetings() {
-  if (cachedMeetings) return cachedMeetings;
+  if (cachedMeetings && Date.now() - cachedMeetingsAt < CALENDAR_TTL_MS) return cachedMeetings;
   if (meetingsInFlight) return meetingsInFlight;
 
   const url = `https://api.openf1.org/v1/meetings?year=${SEASON_YEAR}`;
@@ -300,8 +319,15 @@ async function loadMeetings() {
     }
 
     cachedMeetings = data;
+    cachedMeetingsAt = Date.now();
     return cachedMeetings;
-  })().finally(() => {
+  })().catch((err) => {
+    if (cachedMeetings) {
+      console.error("OpenF1 calendar refresh failed, using stale cache:", err.message);
+      return cachedMeetings;
+    }
+    throw err;
+  }).finally(() => {
     meetingsInFlight = null;
   });
 
